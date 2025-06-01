@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import { useContext } from 'react';
 import { AppProvider, AppContext } from './context/app-provider';
 import Header from './components/header';
 import FolderPicker from './components/folder-picker';
@@ -6,6 +6,7 @@ import PasswordPrompt from './components/password-prompt';
 import FileUpload from './components/file-upload';
 import FileEntry from './components/file-entry';
 import './styles.css';
+import Search from './components/search';
 
 function AppContent() {
   const { folderHandle, metadataLoaded, metadataArray, errorMsg } = useContext(AppContext);
@@ -22,12 +23,13 @@ function AppContent() {
       ) : (
         <>
           <FileUpload />
+          <Search />
           <div className="file-list">
             {metadataArray.length === 0 ? (
-              <p>No files uploaded yet.</p>
+              <p>No files.</p>
             ) : (
-              metadataArray.map((entry, idx) => (
-                <FileEntry key={idx} entry={entry} />
+              metadataArray.map((entry) => (
+                <FileEntry key={entry.name} entry={entry} />
               ))
             )}
           </div>

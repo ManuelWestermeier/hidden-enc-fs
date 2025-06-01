@@ -10,15 +10,22 @@ export function AppProvider({ children }) {
     const [loading, setLoading] = useState(false);
     const [errorMsg, setErrorMsg] = useState('');
     const [metadataLoaded, setMetadataLoaded] = useState(false);
+    const [search, setSearch] = useState("");
 
     return (
         <AppContext.Provider value={{
             folderHandle, setFolderHandle,
             password, setPassword,
-            metadataArray, setMetadataArray,
+            metadataArray: metadataArray.map(item => {
+                return {
+                    ...item,
+                    view: (item.name + item.type + item.date).includes(search),
+                }
+            }), setMetadataArray,
             loading, setLoading,
             errorMsg, setErrorMsg,
-            metadataLoaded, setMetadataLoaded
+            metadataLoaded, setMetadataLoaded,
+            search, setSearch
         }}>
             {children}
         </AppContext.Provider>

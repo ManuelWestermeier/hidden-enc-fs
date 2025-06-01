@@ -19,7 +19,7 @@ export default function FolderPicker() {
     return (
         <div className="folder-picker">
             <p>Select (or create) a folder to store encrypted files:</p>
-            <button className="btn btn-large" onClick={promptForFolder}>Select Folder</button>
+            <button className="btn btn-large" autoFocus onClick={promptForFolder}>Select Folder</button>
         </div>
     );
 }

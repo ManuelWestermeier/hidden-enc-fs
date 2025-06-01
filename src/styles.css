@@ -45,6 +45,16 @@ body {
   margin-bottom: 2rem;
 }
 
+.file-entry {
+  transition: all 0.3s ease-in-out;
+}
+
+.file-entry.hidden {
+  transform: scaleY(0);
+  position: fixed;
+  pointer-events: none;
+}
+
 .input {
   padding: 0.75rem;
   margin-right: 0.5rem;
@@ -52,6 +62,10 @@ body {
   border: 1px solid #ccc;
   background: #1c2b36;
   color: #f0f4f8;
+}
+
+::placeholder {
+  color: #eee;
 }
 
 /* Buttons */
@@ -232,4 +246,8 @@ body {
     text-align: center;
     margin-bottom: 0.5rem;
   }
+}
+
+.draging {
+  transform: scale(0.9);
 }

@@ -5,7 +5,8 @@ import { decryptData, encryptData } from '../crypto-utils';
 export default function PasswordPrompt() {
     const { password, setPassword, folderHandle, setErrorMsg, setMetadataArray, setMetadataLoaded, setLoading } = useContext(AppContext);
 
-    const loadOrInitMetadata = async () => {
+    const loadOrInitMetadata = async (e) => {
+        e.preventDefault();
         if (!folderHandle) return setErrorMsg('No folder selected.');
         if (!password) return setErrorMsg('Please enter a password.');
 
@@ -39,7 +40,7 @@ export default function PasswordPrompt() {
     };
 
     return (
-        <div className="password-prompt">
+        <form onSubmit={loadOrInitMetadata} className="password-prompt">
             <p>Enter your password to load (or initialize) metadata:</p>
             <input
                 type="password"
@@ -47,8 +48,9 @@ export default function PasswordPrompt() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input"
+                autoFocus
             />
-            <button className="btn btn-large" onClick={loadOrInitMetadata}>Load Metadata</button>
-        </div>
+            <button className="btn btn-large" type='submit'>Load Metadata</button>
+        </form>
     );
 }

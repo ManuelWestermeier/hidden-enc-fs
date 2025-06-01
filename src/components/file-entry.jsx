@@ -71,7 +71,7 @@ export default function FileEntry({ entry }) {
     };
 
     return (
-        <div className="file-entry card">
+        <div className={"file-entry card" + (entry.view ? "" : " hidden")}>
             <h2>{entry.name}</h2>
             <p>{entry.type} ― {new Date(entry.date).toLocaleString()}</p>
             {previewUrl && isPreviewable && (

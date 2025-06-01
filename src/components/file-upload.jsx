@@ -51,10 +51,34 @@ export default function FileUpload() {
         e.target.value = '';
     };
 
+    document.body.ondragover = (e) => {
+        e.preventDefault(); // damit Drop funktioniert
+        document.body.classList.add("draging");
+    };
+
+    document.body.ondragleave = (e) => {
+        // Nur entfernen, wenn die Maus wirklich den Body verlässt,
+        // nicht wenn sie z.B. auf ein Kind-Element geht.
+        if (e.target === document.body) {
+            document.body.classList.remove("draging");
+        }
+    };
+
+    document.body.ondragend = document.body.ondragleave;
+
+    document.body.ondrop = (e) => {
+        e.preventDefault();
+        document.body.classList.remove("draging");
+
+        if (e.dataTransfer?.files) {
+            onUpload({ target: { files: e.dataTransfer.files } });
+        }
+    };
+
     return (
         <div className="file-upload">
             <label>
-                <button className='btn btn-large' onClick={() => document.getElementById("upload-file-picker").click()}>Upload file(s)</button>
+                <button style={{ width: "calc(100% - 30px)" }} className='btn btn-large' onClick={() => document.getElementById("upload-file-picker").click()}>Upload file(s)</button>
                 <input style={{ display: "none" }} id='upload-file-picker' type="file" multiple onChange={onUpload} />
             </label>
         </div>
