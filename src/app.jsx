@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { encryptData, decryptData, sha256 } from './crypto-utils';
 
 export default function App() {
@@ -8,6 +8,7 @@ export default function App() {
   const [metadataArray, setMetadataArray] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [metadataLoaded, setMetadataLoaded] = useState(false);
 
   const promptForFolder = async () => {
     console.log('[promptForFolder] Prompting user to select a folder');
@@ -15,6 +16,7 @@ export default function App() {
     setPassword('');
     setMetadataArray([]);
     setFolderHandle(null);
+    setMetadataLoaded(false);
 
     try {
       const handle = await window.showDirectoryPicker();
@@ -43,12 +45,13 @@ export default function App() {
     let metadata = [];
 
     try {
+      console.log('[loadOrInitMetadata] Trying to read data.enc...');
       const dataEncHandle = await folderHandle.getFileHandle('data.enc');
       const file = await dataEncHandle.getFile();
       const text = await file.text();
       console.log('[loadOrInitMetadata] data.enc read:', text);
 
-      let parsed = JSON.parse(text);
+      const parsed = JSON.parse(text);
       const decryptedBytes = await decryptData(parsed, password);
       const jsonStr = new TextDecoder().decode(decryptedBytes);
       metadata = JSON.parse(jsonStr);
@@ -66,6 +69,7 @@ export default function App() {
     }
 
     setMetadataArray(metadata);
+    setMetadataLoaded(true);
     setLoading(false);
     console.log('[loadOrInitMetadata] Done');
   };
@@ -196,7 +200,8 @@ export default function App() {
     setLoading(false);
   };
 
-  // Render logic (unchanged except for logs)
+  // RENDER LOGIC
+
   if (!folderHandle) {
     console.log('[render] No folder selected');
     return (
@@ -209,7 +214,7 @@ export default function App() {
     );
   }
 
-  if (metadataArray.length === 0 && !loading) {
+  if (!metadataLoaded && !loading) {
     console.log('[render] Folder selected, awaiting metadata load');
     return (
       <div style={{ padding: '1rem' }}>
@@ -231,12 +236,17 @@ export default function App() {
     );
   }
 
-  console.log('[render] Metadata loaded, rendering file grid');
+  console.log(
+    '[render] Metadata loaded (array length',
+    metadataArray.length,
+    '), rendering file grid'
+  );
   return (
     <div style={{ padding: '1rem' }}>
       <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>HIDDEN FS</h1>
       {errorMsg && <p style={{ color: 'red' }}>{errorMsg}</p>}
 
+      {/* Upload control */}
       <div style={{ margin: '1rem 0' }}>
         <label>
           Upload new file(s):
@@ -250,6 +260,7 @@ export default function App() {
         {loading && <span style={{ marginLeft: '1rem' }}>Processing…</span>}
       </div>
 
+      {/* Grid of existing files */}
       <div
         style={{
           display: 'grid',
