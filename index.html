@@ -8,15 +8,69 @@
   <meta name="description" content="Hidden FS - Secure, local encrypted file storage in your browser." />
   <meta name="author" content="Manuel Westermeier" />
   <link rel="icon" href="/favicon.ico" type="image/png" />
+
+  <!-- PWA manifest -->
+  <link rel="manifest" href="/manifest.json" />
+
+  <!-- Theme color for browsers -->
+  <meta name="theme-color" content="#2d3748" />
 </head>
 
 <body>
   <noscript>
-    <h1 className="header"><img src="favicon.ico" alt="Logo" /> Hidden FS</h1>;
+    <h1 class="header"><img src="favicon.ico" alt="Logo" /> Hidden FS</h1>
     You need to enable JavaScript to run this app.
   </noscript>
+
   <div id="root"></div>
+
+  <!-- Install button, hidden by default -->
+  <button id="install-btn btn"
+    style="display:none; position: fixed; bottom: 20px; right: 20px; padding: 10px 20px; font-size: 16px; cursor: pointer;">
+    Install App
+  </button>
+
   <script type="module" src="/src/main.jsx"></script>
+
+  <script>
+    // Service worker registration
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('Service worker registered.', reg))
+          .catch(err => console.error('Service worker registration failed:', err));
+      });
+    }
+
+    // Install prompt logic
+    let deferredPrompt;
+    const installBtn = document.getElementById('install-btn');
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault(); // Prevent automatic prompt
+      deferredPrompt = e;  // Save event for triggering later
+      installBtn.style.display = 'block'; // Show the install button
+    });
+
+    installBtn.addEventListener('click', async () => {
+      installBtn.style.display = 'none'; // Hide button once clicked
+      if (deferredPrompt) {
+        deferredPrompt.prompt(); // Show install prompt
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          console.log('User accepted the install prompt');
+        } else {
+          console.log('User dismissed the install prompt');
+        }
+        deferredPrompt = null;
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      console.log('PWA was installed');
+      installBtn.style.display = 'none'; // Hide button after install
+    });
+  </script>
 </body>
 
 </html>

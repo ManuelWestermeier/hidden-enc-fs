@@ -160,33 +160,6 @@ body {
   margin-top: 1rem;
 }
 
-/* Light Mode */
-@media (prefers-color-scheme: light) {
-  body {
-    background: linear-gradient(to right, #dfe9f3, #ffffff);
-    color: #333;
-  }
-
-  .app {
-    background: rgba(255, 255, 255, 0.85);
-    color: #000;
-  }
-
-  .input {
-    background: #fff;
-    color: #000;
-  }
-
-  .card {
-    background: #f7f7f7;
-  }
-
-  .preview-container {
-    background: #eee;
-    border: 1px solid #ccc;
-  }
-}
-
 /* Animations */
 @keyframes fadeIn {
   from {
