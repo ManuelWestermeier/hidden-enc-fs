@@ -59,7 +59,7 @@ body {
   padding: 0.75rem;
   margin-right: 0.5rem;
   border-radius: 8px;
-  border: 1px solid #ccc;
+  border: none;
   background: #1c2b36;
   color: #f0f4f8;
 }
@@ -250,4 +250,8 @@ body {
 
 .draging {
   transform: scale(0.9);
+}
+
+:focus {
+  outline: 0.3rem solid #00c6ff;
 }
