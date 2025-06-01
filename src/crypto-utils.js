@@ -1,94 +1,108 @@
 // src/crypto-utils.js
+//
+// Provides:
+//   • sha256(string) → Promise<string>    (hex digest of UTF-8 string)
+//   • encryptData(plaintext, password) → Promise<{ salt, iv, data }>
+//   • decryptData({ salt, iv, data }, password) → Promise<ArrayBuffer>
+//
+// AES-GCM with 96-bit IV, 128-bit tag. PBKDF2 with 100k iterations (SHA-256).
 
-// ───────────────────────────────────────────────────────────────────────────────
-//  Helper functions for:
-//   • deriveKey(password, salt)       → AES-GCM CryptoKey
-//   • encryptData(data, password)     → { salt, iv, data } (all base64 strings)
-//   • decryptData(encObject, password)→ ArrayBuffer (raw decrypted bytes)
-//   • sha256(str)                     → hex‐string SHA-256 hash
-// ───────────────────────────────────────────────────────────────────────────────
-
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-/**
- * Convert an ArrayBuffer → base64 string
- */
-export function bufferToBase64(buffer) {
-    return btoa(String.fromCharCode(...new Uint8Array(buffer)));
-}
-
-/**
- * Convert a base64 string → ArrayBuffer
- */
-export function base64ToBuffer(base64) {
-    const bytes = atob(base64);
-    const arr = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) {
-        arr[i] = bytes.charCodeAt(i);
+// Convert ArrayBuffer → Base64
+function bufferToBase64(buf) {
+    const bytes = new Uint8Array(buf);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
     }
-    return arr.buffer;
+    return window.btoa(binary);
 }
 
-/**
- * Derive an AES-256-GCM key from a raw password + salt (PBKDF2 + SHA-512).
- * @param {string} password    — raw password
- * @param {ArrayBuffer} salt   — 16-byte salt
- * @param {Array} keyUsage     — e.g. ['encrypt','decrypt']
- * @returns {Promise<CryptoKey>}
- */
-export async function deriveKey(password, salt, keyUsage = ['encrypt', 'decrypt']) {
-    const baseKey = await crypto.subtle.importKey(
+// Convert Base64 → ArrayBuffer
+function base64ToBuffer(b64) {
+    const binary = window.atob(b64);
+    const len = binary.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+// SHA-256 of a UTF-8 string → hex string
+export async function sha256(message) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(message);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    // Convert to hex
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+// Derive a CryptoKey from password + salt (PBKDF2 with 100k iterations, SHA-256; derive 256-bit key for AES-GCM)
+async function deriveKey(password, saltBuffer) {
+    const encoder = new TextEncoder();
+    const passKey = await crypto.subtle.importKey(
         'raw',
         encoder.encode(password),
         { name: 'PBKDF2' },
         false,
         ['deriveKey']
     );
+
     return crypto.subtle.deriveKey(
         {
             name: 'PBKDF2',
-            salt: salt,
+            salt: saltBuffer,
             iterations: 100000,
-            hash: 'SHA-512',
+            hash: 'SHA-256',
         },
-        baseKey,
+        passKey,
         { name: 'AES-GCM', length: 256 },
         false,
-        keyUsage
+        ['encrypt', 'decrypt']
     );
 }
 
 /**
- * Encrypt either a string or an ArrayBuffer under AES-256-GCM.
- * @param { string | ArrayBuffer } data       — if string → UTF-8; if ArrayBuffer → raw bytes
- * @param { string } password                 — user’s password
- * @returns { Promise<{ salt: string, iv: string, data: string }> }
+ * encryptData( plaintext, password ) → Promise<{ salt, iv, data }>
  *
- *   • salt, iv, data are all base64-encoded strings.
- *   • salt = 16 random bytes; iv = 12 random bytes.
+ * • If plaintext is a string, it will be UTF-8 encoded before encryption.
+ * • Returns an object with:
+ *     • salt: Base64-encoded 16-byte salt
+ *     • iv:   Base64-encoded 12-byte IV
+ *     • data: Base64-encoded ciphertext (AES-GCM, 128-bit tag appended)
  */
-export async function encryptData(data, password) {
-    // 1) Generate salt & iv
+export async function encryptData(plaintext, password) {
+    // 1) Generate 16-byte random salt
     const salt = crypto.getRandomValues(new Uint8Array(16));
+    // 2) Derive a key
+    const key = await deriveKey(password, salt.buffer);
+    // 3) Generate 12-byte IV for AES-GCM
     const iv = crypto.getRandomValues(new Uint8Array(12));
 
-    // 2) Derive AES key
-    const key = await deriveKey(password, salt, ['encrypt']);
-
-    // 3) Prepare plaintext bytes
-    let plaintext;
-    if (typeof data === 'string') {
-        plaintext = encoder.encode(data);
+    // 4) Prepare plaintext buffer
+    let plainBuf;
+    if (typeof plaintext === 'string') {
+        plainBuf = new TextEncoder().encode(plaintext);
+    } else if (plaintext instanceof ArrayBuffer) {
+        plainBuf = new Uint8Array(plaintext);
+    } else if (plaintext.buffer instanceof ArrayBuffer) {
+        // In case caller passes a TypedArray
+        plainBuf = new Uint8Array(plaintext.buffer);
     } else {
-        plaintext = data;
+        throw new Error('encryptData: unsupported plaintext type');
     }
 
-    // 4) Encrypt
+    // 5) Encrypt
     const cipherBuffer = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: iv },
+        {
+            name: 'AES-GCM',
+            iv: iv,
+        },
         key,
-        plaintext
+        plainBuf
     );
 
     return {
@@ -99,31 +113,36 @@ export async function encryptData(data, password) {
 }
 
 /**
- * Decrypts a previously‐encrypted object (with encryptData).
- * @param { { salt: string, iv: string, data: string } } encObject
- * @param { string } password
- * @returns { Promise<ArrayBuffer> } — raw decrypted bytes
+ * decryptData( { salt, iv, data }, password ) → Promise<ArrayBuffer>
+ *
+ * • salt, iv, data are Base64 strings
+ * • Returns the decrypted ArrayBuffer; caller can TextDecoder(...) if needed.
  */
-export async function decryptData(encObject, password) {
-    // 1) Base64 → ArrayBuffer
-    const salt = base64ToBuffer(encObject.salt);
-    const iv = base64ToBuffer(encObject.iv);
-    const data = base64ToBuffer(encObject.data);
+export async function decryptData(encObj, password) {
+    const { salt, iv, data } = encObj;
 
-    // 2) Derive key
-    const key = await deriveKey(password, salt, ['decrypt']);
+    // 1) Convert Base64 → ArrayBuffers
+    const saltBuf = base64ToBuffer(salt);
+    const ivBuf = base64ToBuffer(iv);
+    const cipherBuf = base64ToBuffer(data);
+
+    // 2) Derive same key from password + salt
+    const key = await deriveKey(password, saltBuf);
 
     // 3) Decrypt
-    return await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv }, key, data);
-}
+    let plainBuf;
+    try {
+        plainBuf = await crypto.subtle.decrypt(
+            {
+                name: 'AES-GCM',
+                iv: ivBuf,
+            },
+            key,
+            cipherBuf
+        );
+    } catch (e) {
+        throw new Error('Incorrect password or corrupt data');
+    }
 
-/**
- * Compute SHA-256 on a UTF-8 string, return lowercase hex string.
- * @param {string} str
- * @returns {Promise<string>} — e.g. "a3f5…"
- */
-export async function sha256(str) {
-    const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(str));
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    return plainBuf;
 }
