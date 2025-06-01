@@ -3,7 +3,7 @@ import { AppContext } from '../context/app-provider';
 import { decryptData, encryptData } from '../crypto-utils';
 
 export default function FileEntry({ entry }) {
-    const { folderHandle, password, metadataArray, setMetadataArray, setErrorMsg, setLoading } = useContext(AppContext);
+    const { folderHandle, password, metadataArray, setMetadataArray, setErrorMsg } = useContext(AppContext);
     const [previewUrl, setPreviewUrl] = useState("");
     const [isPreviewable, setIsPreviewable] = useState(false);
 

@@ -248,7 +248,11 @@ body {
   }
 }
 
-.draging {
+body {
+  transition: all 0.3s ease-in-out;
+}
+
+body.draging {
   transform: scale(0.9);
 }
 
