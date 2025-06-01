@@ -1,4 +1,3 @@
-// src/crypto-utils.js
 //
 // Provides:
 //   • sha256(string) → Promise<string>    (hex digest of UTF-8 string)
