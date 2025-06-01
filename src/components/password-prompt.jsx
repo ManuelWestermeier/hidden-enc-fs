@@ -44,7 +44,7 @@ export default function PasswordPrompt() {
             <p>Enter your password to load (or initialize) metadata:</p>
             <input
                 type="password"
-                placeholder="Password"
+                placeholder="Password..."
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input"
