@@ -3,12 +3,18 @@
     "short_name": "HiddenFS",
     "start_url": "/",
     "display": "standalone",
-    "background_color": "#fff",
-    "theme_color": "#000",
+    "background_color": "#ffffff",
+    "theme_color": "#000000",
     "description": "Secure, local encrypted file storage in your browser.",
     "icons": [
         {
-            "src": "/favicon.ico",
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
             "type": "image/png"
         }
     ]
