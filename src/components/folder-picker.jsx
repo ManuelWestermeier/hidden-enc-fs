@@ -25,6 +25,9 @@ export default function FolderPicker() {
                 You can view, upload, create, or delete files securely, with all content staying on your local device.
                 If the password is incorrect or the data is invalid, you can retry or select another folder.
             </p>
+            <p>
+                Free, <a href="https://github.com/ManuelWestermeier/hidden-enc-fs">Open Source</a> & Ultra Secure
+            </p>
 
             <p>Select (or create) a folder to store encrypted files:</p>
             <button className="btn btn-large" autoFocus onClick={promptForFolder}>Select Folder</button>
