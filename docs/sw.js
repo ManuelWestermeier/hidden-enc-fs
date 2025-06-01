@@ -1,14 +1,17 @@
-const CACHE_NAME = 'hidden-fs-cache-v1';
+const CACHE_NAME = 'hidden-fs-cache-v3';
+
 const urlsToCache = [
     '/',
     '/index.html',
     '/favicon.ico',
     '/icon-192.png',
+    '/icon-512.png',
     '/manifest.json',
     '/index.css',
     '/index.js'
 ];
 
+// Cache core files on install
 self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
@@ -17,6 +20,7 @@ self.addEventListener('install', event => {
     );
 });
 
+// Delete old caches on activate
 self.addEventListener('activate', event => {
     event.waitUntil(
         caches.keys().then(keys =>
@@ -28,9 +32,20 @@ self.addEventListener('activate', event => {
     );
 });
 
+// Serve updated files from network first, fall back to cache
 self.addEventListener('fetch', event => {
+    if (event.request.method !== 'GET') return;
+
     event.respondWith(
-        caches.match(event.request)
-            .then(response => response || fetch(event.request))
+        fetch(event.request)
+            .then(networkResponse => {
+                // Optionally update cache with the latest version
+                const responseClone = networkResponse.clone();
+                caches.open(CACHE_NAME).then(cache => {
+                    cache.put(event.request, responseClone);
+                });
+                return networkResponse;
+            })
+            .catch(() => caches.match(event.request)) // Fallback to cache
     );
 });
