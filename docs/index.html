@@ -3,42 +3,16 @@
 
 <head>
   <meta charset="utf-8" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <title>Hidden FS - Secure Encrypted Local File Storage in Your Browser</title>
-
-  <meta name="description"
-    content="Hidden FS is a secure, privacy-focused file manager that encrypts and stores your files locally in the browser using AES-GCM. No data ever leaves your device." />
-  <meta name="keywords"
-    content="encrypted file manager, AES encryption, browser file storage, secure local storage, privacy-first file system" />
+  <title>Hidden FS</title>
+  <meta name="description" content="Hidden FS - Secure, local encrypted file storage in your browser." />
   <meta name="author" content="Manuel Westermeier" />
-
-  <!-- Canonical URL -->
-  <link rel="canonical" href="https://yourdomain.example/hidden-fs" />
-
-  <!-- Open Graph Meta Tags -->
-  <meta property="og:title" content="Hidden FS – Secure Local File Storage" />
-  <meta property="og:description"
-    content="Browse, encrypt, and manage files directly in your browser. Fully private. No cloud, no servers." />
-  <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://yourdomain.example/hidden-fs" />
-  <meta property="og:image" content="https://yourdomain.example/images/og-image.png" />
-
-  <!-- Twitter Card -->
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Hidden FS – Local Encrypted File Storage" />
-  <meta name="twitter:description"
-    content="A secure, offline-capable file system in your browser using AES encryption." />
-  <meta name="twitter:image" content="https://yourdomain.example/images/og-image.png" />
-
-  <!-- Favicon -->
-  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+  <link rel="icon" href="/favicon.ico" type="image/png" />
 
   <!-- PWA manifest -->
   <link rel="manifest" href="/manifest.json" />
 
-  <!-- Theme color for mobile address bar -->
+  <!-- Theme color for browsers -->
   <meta name="theme-color" content="#2d3748" />
   <script type="module" crossorigin src="/index.js"></script>
   <link rel="stylesheet" crossorigin href="/index.css">
@@ -52,7 +26,8 @@
 
   <div id="root"></div>
 
-  <button id="install-btn" style="display:none; position: fixed; bottom: 20px; right: 20px;">
+  <!-- Install button, hidden by default -->
+  <button id="install-btn" style="display:none; position: fixed; bottom: 20px; right: 20px;" class="btn btn-large">
     Install App
   </button>
 
@@ -71,19 +46,20 @@
       });
     }
 
+    // Install prompt logic
     let deferredPrompt;
     const installBtn = document.getElementById('install-btn');
 
     window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      installBtn.style.display = 'block';
+      e.preventDefault(); // Prevent automatic prompt
+      deferredPrompt = e;  // Save event for triggering later
+      installBtn.style.display = 'block'; // Show the install button
     });
 
     installBtn.addEventListener('click', async () => {
-      installBtn.style.display = 'none';
+      installBtn.style.display = 'none'; // Hide button once clicked
       if (deferredPrompt) {
-        deferredPrompt.prompt();
+        deferredPrompt.prompt(); // Show install prompt
         const { outcome } = await deferredPrompt.userChoice;
         if (outcome === 'accepted') {
           console.log('User accepted the install prompt');
@@ -96,9 +72,10 @@
 
     window.addEventListener('appinstalled', () => {
       console.log('PWA was installed');
-      installBtn.style.display = 'none';
+      installBtn.style.display = 'none'; // Hide button after install
     });
   </script>
+
 </body>
 
 </html>
