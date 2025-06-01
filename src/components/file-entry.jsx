@@ -136,12 +136,12 @@ export default function FileEntry({ entry }) {
             <p>{entry.type} ― {new Date(entry.date).toLocaleString()}</p>
 
             {previewUrl && isPreviewable && (
-                <div className="preview-container">
-                    {entry.type.startsWith('image') && <img className="content" src={previewUrl} alt={entry.name} />}
-                    {entry.type.startsWith('video') && <video className="content" controls src={previewUrl} />}
-                    {entry.type.startsWith('audio') && <audio className="content" controls src={previewUrl} />}
-                    {entry.type === 'application/pdf' && <iframe className="content" src={previewUrl} title="PDF Preview" />}
-                    {entry.type.startsWith('text') && <iframe className="content" src={previewUrl} title="Text Preview" />}
+                <div className="preview-container" onClick={e => e.target.requestFullscreen()}>
+                    {entry.type.startsWith('image') && <img className="content" tabIndex={-1} src={previewUrl} alt={entry.name} />}
+                    {entry.type.startsWith('video') && <video className="content" tabIndex={-1} controls src={previewUrl} />}
+                    {entry.type.startsWith('audio') && <audio className="content" tabIndex={-1} controls src={previewUrl} />}
+                    {entry.type === 'application/pdf' && <iframe className="content" tabIndex={-1} src={previewUrl} title="PDF Preview" />}
+                    {entry.type.startsWith('text') && <iframe className="content" tabIndex={-1} src={previewUrl} title="Text Preview" />}
                 </div>
             )}
 

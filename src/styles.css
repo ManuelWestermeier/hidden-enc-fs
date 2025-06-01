@@ -182,7 +182,7 @@ body {
 
   .app {
     border-radius: 0;
-    height: calc(100dvh - 4rem);
+    min-height: calc(100dvh - 4rem);
     margin: 0;
   }
 
@@ -197,6 +197,10 @@ body {
 
   .btn-large {
     font-size: 1.25rem;
+  }
+
+  .file-entry.card {
+    width: calc(100% - 4rem);
   }
 
   .file-title {
