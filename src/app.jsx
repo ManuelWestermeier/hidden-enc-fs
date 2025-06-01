@@ -1,4 +1,3 @@
-// app.js
 import React, { useContext } from 'react';
 import { AppProvider, AppContext } from './context/app-provider';
 import Header from './components/header';

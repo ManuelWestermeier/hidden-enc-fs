@@ -3,6 +3,7 @@
 //   • sha256(string) → Promise<string>    (hex digest of UTF-8 string)
 //   • encryptData(plaintext, password) → Promise<{ salt, iv, data }>
 //   • decryptData({ salt, iv, data }, password) → Promise<ArrayBuffer>
+//       - sanitizeFilename
 //
 // AES-GCM with 96-bit IV, 128-bit tag. PBKDF2 with 100k iterations (SHA-256).
 
@@ -144,4 +145,16 @@ export async function decryptData(encObj, password) {
     }
 
     return plainBuf;
+}
+
+export function sanitizeFilename(name) {
+    const dotIndex = name.lastIndexOf('.');
+    const base = dotIndex >= 0 ? name.slice(0, dotIndex) : name;
+    const ext = dotIndex >= 0 ? name.slice(dotIndex) : '';
+    const kebab = base
+        .replace(/[^a-zA-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-+/g, '-')
+        .toLowerCase();
+    return `${kebab}${ext.toLowerCase()}`;
 }
