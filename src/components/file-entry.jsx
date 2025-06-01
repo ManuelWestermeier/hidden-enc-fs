@@ -1,10 +1,21 @@
-import { useContext, useState } from 'react';
+import { useContext, useState, useEffect } from 'react';
 import { AppContext } from '../context/app-provider';
 import { decryptData, encryptData } from '../crypto-utils';
 
 export default function FileEntry({ entry }) {
     const { folderHandle, password, metadataArray, setMetadataArray, setErrorMsg, setLoading } = useContext(AppContext);
-    const [iframeUrl, setIframeUrl] = useState("");
+    const [previewUrl, setPreviewUrl] = useState("");
+    const [isPreviewable, setIsPreviewable] = useState(false);
+
+    useEffect(() => {
+        setIsPreviewable(
+            entry.type.startsWith("image") ||
+            entry.type.startsWith("text") ||
+            entry.type.startsWith("video") ||
+            entry.type.startsWith("audio") ||
+            entry.type.startsWith("application/pdf")
+        );
+    }, [entry.type]);
 
     const writeMetadata = async (data) => {
         const enc = await encryptData(JSON.stringify(data), password);
@@ -40,9 +51,9 @@ export default function FileEntry({ entry }) {
             const decryptedBuf = await decryptData(encObj, password);
             const blob = new Blob([decryptedBuf], { type: entry.type });
             const url = URL.createObjectURL(blob);
-            setIframeUrl(url);
+            setPreviewUrl(url);
         } catch {
-            setErrorMsg('Failed to decrypt/download.');
+            setErrorMsg('Failed to decrypt/view.');
         }
     };
 
@@ -60,11 +71,20 @@ export default function FileEntry({ entry }) {
     };
 
     return (
-        <div className="file-entry">
+        <div className="file-entry card">
             <h2>{entry.name}</h2>
             <p>{entry.type} ― {new Date(entry.date).toLocaleString()}</p>
-            {iframeUrl && <iframe src={iframeUrl} alt="failed to load"></iframe>}
-            <button className="btn" onClick={onView}>View</button>
+            {previewUrl && isPreviewable && (
+                <div className="preview-container">
+                    {entry.type.startsWith('image') && <img className='content' src={previewUrl} alt={entry.name} />}
+                    {entry.type.startsWith('video') && <video className='content' controls src={previewUrl} alt={entry.name} />}
+                    {entry.type.startsWith('audio') && <audio className='content' controls src={previewUrl} alt={entry.name} />}
+
+                    {entry.type === 'application/pdf' && <iframe className='content' src={previewUrl} title="PDF Preview" />}
+                    {entry.type.startsWith('text') && <iframe className='content' src={previewUrl} title="Text Preview" />}
+                </div>
+            )}
+            {isPreviewable && <button className="btn" onClick={onView}>View</button>}
             <button className="btn" onClick={onDownload}>Download</button>
             <button className="btn danger" onClick={onDelete}>Delete</button>
         </div>
