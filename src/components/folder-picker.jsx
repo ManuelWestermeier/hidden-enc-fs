@@ -13,7 +13,9 @@ export default function FolderPicker() {
         try {
             const handle = await window.showDirectoryPicker();
             setFolderHandle(handle);
-        } catch (e) { }
+        } catch (e) {
+            setErrorMsg('Your device doesn\'t support this App. (no fs acess/you have to allow file editing)');
+        }
     };
 
     return (

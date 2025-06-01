@@ -132,7 +132,13 @@ export default function FileEntry({ entry }) {
             ref={entryRef}
             className={`file-entry card${entry.view ? '' : ' hidden'}`}
         >
-            <h2>{entry.name}</h2>
+            <h2 style={{
+                whiteSpace: 'normal',  // allow wrapping (default is normal anyway)
+                wordBreak: 'break-word', // break long words if needed
+                overflowWrap: 'break-word' // ensure wrapping for long strings
+            }}>
+                {entry.name}
+            </h2>
             <p>{entry.type} ― {new Date(entry.date).toLocaleString()}</p>
 
             {previewUrl && isPreviewable && (
