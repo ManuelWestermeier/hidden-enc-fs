@@ -37,7 +37,7 @@ export default function FileUpload() {
             await writable.write(JSON.stringify(encrypted));
             await writable.close();
 
-            updatedMeta.push({
+            updatedMeta.unshift({
                 name: formattedName,
                 type: file.type || 'application/octet-stream',
                 date: new Date(file.lastModified || Date.now()).toISOString(),

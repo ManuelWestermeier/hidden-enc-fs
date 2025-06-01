@@ -48,7 +48,7 @@ export default function PasswordPrompt() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="input"
             />
-            <button className="btn" onClick={loadOrInitMetadata}>Load Metadata</button>
+            <button className="btn btn-large" onClick={loadOrInitMetadata}>Load Metadata</button>
         </div>
     );
 }
