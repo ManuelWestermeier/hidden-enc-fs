@@ -1,128 +1,349 @@
-import { useState } from 'react';
+// src/App.js
+import React, { useEffect, useState } from 'react';
+import {
+  encryptData,
+  decryptData,
+  sha256
+} from './crypto-utils';
 
-import "./crypto-utils.js"
-import "./file-access.js"
+/**
+ * ───────────────────────────────────────────────────────────────────────────────
+ *  “Hidden FS” React App (Pure JavaScript)
+ *
+ *  • On mount: force user to select a folder + enter password.
+ *  • Checks for data.enc:
+ *     – If exists → try decrypt; on invalid password or invalid JSON → ask again.
+ *     – If missing → create a new, empty data.enc (“[]”).
+ *  • Once metadata is loaded, let user:
+ *     – Upload new files (any type). Each file:
+ *         • Compute hash := sha256(filename + lastModified + randomID)
+ *         • Encrypt its ArrayBuffer under AES-256-GCM.
+ *         • Write <hash>.enc → folder.
+ *         • Add metadata { name, type, date, hash } → metadataArray.
+ *         • Overwrite data.enc with encrypted JSON(metadataArray).
+ *     – View a grid of existing metadata.
+ *       • Download: decrypt <hash>.enc → Blob → download link.
+ *       • Delete: remove <hash>.enc and re‐write data.enc.
+ *
+ *  Browser requirement: Chromium‐based (needs File System Access API).
+ * ───────────────────────────────────────────────────────────────────────────────
+ */
 
 export default function App() {
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  STATE
+  // ─────────────────────────────────────────────────────────────────────────────
   const [folderHandle, setFolderHandle] = useState(null);
   const [password, setPassword] = useState('');
-  const [files, setFiles] = useState([]);
-  const [sortKey, setSortKey] = useState('name');
-  const [newFileName, setNewFileName] = useState('');
-  const [newFileContent, setNewFileContent] = useState('');
+  const [metadataArray, setMetadataArray] = useState([]); // array of { name, type, date, hash }
+  const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const saveMetadata = async (metadataArray) => {
-    const encrypted = await encryptAESGCM(JSON.stringify(metadataArray), password);
-    const dataEncHandle = await folderHandle.getFileHandle('data.enc', { create: true });
-    const writable = await dataEncHandle.createWritable();
-    await writable.write(JSON.stringify(encrypted));
-    await writable.close();
-  };
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  1) Prompt for folder → set folderHandle
+  // ─────────────────────────────────────────────────────────────────────────────
+  const promptForFolder = async () => {
+    setErrorMsg('');
+    setPassword('');
+    setMetadataArray([]);
+    setFolderHandle(null);
 
-  const loadFiles = async () => {
     try {
       const handle = await window.showDirectoryPicker();
       setFolderHandle(handle);
-      let metadataArray = [];
-
-      try {
-        const dataEncHandle = await handle.getFileHandle('data.enc');
-        const file = await dataEncHandle.getFile();
-        const jsonEnc = JSON.parse(await file.text());
-        const decryptedText = await decryptAESGCM(jsonEnc, password);
-        metadataArray = JSON.parse(decryptedText);
-      } catch (err) {
-        await saveMetadata([]); // Initialize if missing
-        alert('No data.enc found. Initialized new encrypted metadata file.');
-      }
-
-      const filesWithData = [];
-      for (const meta of metadataArray) {
-        const hash = await sha256(meta.name);
-        try {
-          const fileHandle = await handle.getFileHandle(`${hash}.enc`);
-          const file = await fileHandle.getFile();
-          const enc = JSON.parse(await file.text());
-          const content = await decryptAESGCM(enc, password);
-          filesWithData.push({ ...meta, content });
-        } catch { }
-      }
-      setFiles(filesWithData);
-    } catch (err) {
-      console.error(err);
-      alert('Failed to load or decrypt files.');
+    } catch (e) {
+      console.error('Folder selection cancelled or failed', e);
     }
   };
 
-  const createFile = async () => {
-    if (!folderHandle || !newFileName || !newFileContent) return;
-    const newMeta = { name: newFileName, type: 'text/plain', date: new Date().toISOString() };
-    const hash = await sha256(newFileName);
-    const encrypted = await encryptAESGCM(newFileContent, password);
-    const fileHandle = await folderHandle.getFileHandle(`${hash}.enc`, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(JSON.stringify(encrypted));
-    await writable.close();
-    const updatedFiles = [...files, { ...newMeta, content: newFileContent }];
-    setFiles(updatedFiles);
-    await saveMetadata(updatedFiles.map(({ name, type, date }) => ({ name, type, date })));
-    setNewFileName('');
-    setNewFileContent('');
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  2) Once folderHandle is set, user enters password + clicks “Load Metadata”
+  // ─────────────────────────────────────────────────────────────────────────────
+  const loadOrInitMetadata = async () => {
+    if (!folderHandle) {
+      setErrorMsg('No folder selected.');
+      return;
+    }
+    if (!password) {
+      setErrorMsg('Please enter a password.');
+      return;
+    }
+    setLoading(true);
+    setErrorMsg('');
+
+    let metadata = [];
+
+    // Try reading data.enc
+    try {
+      const dataEncHandle = await folderHandle.getFileHandle('data.enc');
+      const file = await dataEncHandle.getFile();
+      const text = await file.text();
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch {
+        throw new Error('data.enc is not valid JSON.');
+      }
+
+      let decryptedBytes;
+      try {
+        decryptedBytes = await decryptData(parsed, password);
+      } catch {
+        throw new Error('Incorrect password or corrupt data.enc.');
+      }
+
+      let jsonStr;
+      try {
+        jsonStr = new TextDecoder().decode(decryptedBytes);
+        metadata = JSON.parse(jsonStr);
+      } catch {
+        throw new Error('Decrypted data is not valid JSON.');
+      }
+    } catch (e) {
+      // data.enc did not exist or failed parsing/decryption
+      if (e.message.startsWith('Incorrect password')) {
+        setErrorMsg(e.message);
+        setLoading(false);
+        return;
+      }
+      // Create new data.enc with empty array
+      await writeMetadata(folderHandle, [], password);
+      metadata = [];
+    }
+
+    setMetadataArray(metadata);
+    setLoading(false);
   };
 
-  const sortedFiles = [...files].sort((a, b) => {
-    if (sortKey === 'name') return a.name.localeCompare(b.name);
-    if (sortKey === 'type') return a.type.localeCompare(b.type);
-    if (sortKey === 'date') return new Date(a.date) - new Date(b.date);
-    return 0;
-  });
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  Write metadataArray → encrypted data.enc on disk
+  // ─────────────────────────────────────────────────────────────────────────────
+  const writeMetadata = async (dirHandle, metadata, pwd) => {
+    const text = JSON.stringify(metadata);
+    const encObj = await encryptData(text, pwd);
+    const handle = await dirHandle.getFileHandle('data.enc', { create: true });
+    const writable = await handle.createWritable();
+    await writable.write(JSON.stringify(encObj));
+    await writable.close();
+  };
 
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  3) Upload new file(s): encrypt + write <hash>.enc + update metadata
+  // ─────────────────────────────────────────────────────────────────────────────
+  const onUpload = async (evt) => {
+    if (!folderHandle || !password) {
+      setErrorMsg('Load metadata (folder + password) first.');
+      return;
+    }
+    const fileList = Array.from(evt.target.files);
+    if (fileList.length === 0) return;
+    setLoading(true);
+
+    const updatedMeta = [...metadataArray];
+
+    for (let file of fileList) {
+      // Generate randomID (8 random bytes in hex)
+      const randomBytes = crypto.getRandomValues(new Uint8Array(8));
+      let randomID = '';
+      randomBytes.forEach((b) => {
+        randomID += b.toString(16).padStart(2, '0');
+      });
+
+      // Hash = sha256(filename + lastModified + randomID)
+      const composite = file.name + file.lastModified + randomID;
+      const hash = await sha256(composite);
+
+      // Read file as ArrayBuffer
+      const arrayBuffer = await file.arrayBuffer();
+
+      // Encrypt raw ArrayBuffer under password
+      const encObj = await encryptData(arrayBuffer, password);
+
+      // Write to disk under "<hash>.enc"
+      const fHandle = await folderHandle.getFileHandle(`${hash}.enc`, { create: true });
+      const writable = await fHandle.createWritable();
+      await writable.write(JSON.stringify(encObj));
+      await writable.close();
+
+      // Add metadata entry
+      updatedMeta.push({
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        date: new Date(file.lastModified || Date.now()).toISOString(),
+        hash: hash,
+      });
+    }
+
+    // Persist updated metadata
+    await writeMetadata(folderHandle, updatedMeta, password);
+    setMetadataArray(updatedMeta);
+    setLoading(false);
+
+    // Clear file input so you can re-upload same file again if desired
+    evt.target.value = '';
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  4) Download entry: decrypt <hash>.enc → ArrayBuffer → Blob → trigger download
+  // ─────────────────────────────────────────────────────────────────────────────
+  const onDownload = async (entry) => {
+    if (!folderHandle || !password) {
+      setErrorMsg('No folder or password.');
+      return;
+    }
+    setLoading(true);
+
+    try {
+      const fHandle = await folderHandle.getFileHandle(`${entry.hash}.enc`);
+      const file = await fHandle.getFile();
+      const text = await file.text();
+      let encObj;
+      try {
+        encObj = JSON.parse(text);
+      } catch {
+        throw new Error('Encrypted file is not valid JSON.');
+      }
+
+      const decryptedBuf = await decryptData(encObj, password);
+      const blob = new Blob([decryptedBuf], { type: entry.type });
+      const url = URL.createObjectURL(blob);
+
+      // Programmatically click <a> to download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = entry.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+      setErrorMsg('Failed to decrypt/download file. Possibly wrong password or missing file.');
+    }
+
+    setLoading(false);
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  5) Delete entry: remove <hash>.enc + update data.enc
+  // ─────────────────────────────────────────────────────────────────────────────
+  const onDelete = async (entry) => {
+    if (!folderHandle || !password) {
+      setErrorMsg('No folder or password.');
+      return;
+    }
+    const confirmDel = window.confirm(`Delete "${entry.name}" permanently?`);
+    if (!confirmDel) return;
+
+    setLoading(true);
+
+    try {
+      // Remove the encrypted file
+      await folderHandle.removeEntry(`${entry.hash}.enc`);
+
+      // Filter metadata
+      const filtered = metadataArray.filter((m) => m.hash !== entry.hash);
+
+      // Write updated metadata
+      await writeMetadata(folderHandle, filtered, password);
+      setMetadataArray(filtered);
+    } catch (e) {
+      console.error(e);
+      setErrorMsg('Failed to delete file or update metadata.');
+    }
+
+    setLoading(false);
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  //  RENDER LOGIC
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // 1) If no folder selected yet
+  if (!folderHandle) {
+    return (
+      <div style={{ padding: '1rem' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>HIDDEN FS</h1>
+        <p>Select (or create) a folder to store encrypted files:</p>
+        <button onClick={promptForFolder}>Select Folder</button>
+        {errorMsg && <p style={{ color: 'red' }}>{errorMsg}</p>}
+      </div>
+    );
+  }
+
+  // 2) Folder selected, but metadata not yet loaded
+  if (metadataArray.length === 0 && !loading) {
+    return (
+      <div style={{ padding: '1rem' }}>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>HIDDEN FS</h1>
+        <p>Folder selected. Enter your password to load (or initialize) metadata:</p>
+        <div style={{ marginBottom: '1rem' }}>
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            style={{ marginRight: '0.5rem' }}
+          />
+          <button onClick={loadOrInitMetadata}>Load Metadata</button>
+        </div>
+        {errorMsg && <p style={{ color: 'red' }}>{errorMsg}</p>}
+        {loading && <p>Loading…</p>}
+      </div>
+    );
+  }
+
+  // 3) Metadata loaded (possibly empty). Show upload + grid.
   return (
     <div style={{ padding: '1rem' }}>
       <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>HIDDEN FS</h1>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        <input
-          type="password"
-          placeholder="Enter password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-        />
-        <button onClick={loadFiles}>Select Folder</button>
-        <select value={sortKey} onChange={e => setSortKey(e.target.value)}>
-          <option value="name">Name</option>
-          <option value="type">Type</option>
-          <option value="date">Date</option>
-        </select>
+      {errorMsg && <p style={{ color: 'red' }}>{errorMsg}</p>}
+
+      {/* Upload control */}
+      <div style={{ margin: '1rem 0' }}>
+        <label>
+          Upload new file(s):
+          <input
+            type="file"
+            multiple
+            onChange={onUpload}
+            style={{ marginLeft: '0.5rem' }}
+          />
+        </label>
+        {loading && <span style={{ marginLeft: '1rem' }}>Processing…</span>}
       </div>
 
-      {folderHandle && (
-        <div style={{ marginBottom: '1rem' }}>
-          <h2>Create New File</h2>
-          <input
-            type="text"
-            placeholder="File name"
-            value={newFileName}
-            onChange={e => setNewFileName(e.target.value)}
-          />
-          <textarea
-            placeholder="File content"
-            value={newFileContent}
-            onChange={e => setNewFileContent(e.target.value)}
-            rows={4}
-            style={{ width: '100%', marginTop: '0.5rem' }}
-          />
-          <button onClick={createFile}>Create File</button>
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
-        {sortedFiles.map((file, idx) => (
-          <div key={idx} style={{ border: '1px solid #ccc', padding: '1rem', borderRadius: '8px' }}>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: '600' }}>{file.name}</h2>
-            <p style={{ fontSize: '0.85rem', color: '#666' }}>{file.type} — {new Date(file.date).toLocaleString()}</p>
-            <pre style={{ marginTop: '0.5rem', fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{file.content}</pre>
+      {/* Grid of existing files */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          gap: '1rem',
+        }}
+      >
+        {metadataArray.map((entry, idx) => (
+          <div
+            key={idx}
+            style={{
+              border: '1px solid #ccc',
+              borderRadius: '8px',
+              padding: '0.75rem',
+            }}
+          >
+            <h2 style={{ fontSize: '1.1rem', margin: 0 }}>{entry.name}</h2>
+            <p style={{ fontSize: '0.8rem', color: '#666', margin: '0.25rem 0' }}>
+              {entry.type || 'application/octet-stream'} ―{' '}
+              {new Date(entry.date).toLocaleString()}
+            </p>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button onClick={() => onDownload(entry)}>Download</button>
+              <button onClick={() => onDelete(entry)}>Delete</button>
+            </div>
           </div>
         ))}
+        {metadataArray.length === 0 && (
+          <p style={{ fontStyle: 'italic' }}>No files uploaded yet.</p>
+        )}
       </div>
     </div>
   );
