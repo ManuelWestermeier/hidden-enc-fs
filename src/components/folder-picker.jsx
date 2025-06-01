@@ -1,5 +1,4 @@
-// components/folder-picker.js
-import React, { useContext } from 'react';
+import { useContext } from 'react';
 import { AppContext } from '../context/app-provider';
 
 export default function FolderPicker() {

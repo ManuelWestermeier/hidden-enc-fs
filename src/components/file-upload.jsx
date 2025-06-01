@@ -1,4 +1,3 @@
-// components/file-upload.js
 import React, { useContext } from 'react';
 import { AppContext } from '../context/app-provider';
 import { encryptData, sha256, sanitizeFilename } from '../crypto-utils';

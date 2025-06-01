@@ -1,4 +1,3 @@
-// components/password-prompt.js
 import React, { useContext } from 'react';
 import { AppContext } from '../context/app-provider';
 import { decryptData, encryptData } from '../crypto-utils';
