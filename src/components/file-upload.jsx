@@ -54,8 +54,8 @@ export default function FileUpload() {
     return (
         <div className="file-upload">
             <label>
-                Upload file(s):
-                <input type="file" multiple onChange={onUpload} />
+                <button className='btn btn-large' onClick={() => document.getElementById("upload-file-picker").click()}>Upload file(s)</button>
+                <input style={{ display: "none" }} id='upload-file-picker' type="file" multiple onChange={onUpload} />
             </label>
         </div>
     );
