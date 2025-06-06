@@ -1,4 +1,4 @@
-const CACHE_NAME = "hidden-fs-cache-v9";
+const CACHE_NAME = "hidden-fs-cache-v10";
 
 const urlsToCache = [
   "/",
