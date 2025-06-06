@@ -1,15 +1,19 @@
-import { useContext } from 'react';
-import { AppProvider, AppContext } from './context/app-provider';
-import Header from './components/header';
-import FolderPicker from './components/folder-picker';
-import PasswordPrompt from './components/password-prompt';
-import FileUpload from './components/file-upload';
-import FileEntry from './components/file-entry';
-import './styles.css';
-import Search from './components/search';
+import { useContext, useState } from "react";
+import { AppProvider, AppContext } from "./context/app-provider";
+import Header from "./components/header";
+import FolderPicker from "./components/folder-picker";
+import PasswordPrompt from "./components/password-prompt";
+import FileUpload from "./components/file-upload";
+import FileEntry from "./components/file-entry";
+import "./styles.css";
+import Search from "./components/search";
 
 function AppContent() {
-  const { folderHandle, metadataLoaded, metadataArray, errorMsg } = useContext(AppContext);
+  const { folderHandle, metadataLoaded, metadataArray, errorMsg } =
+    useContext(AppContext);
+  const [lastError, setLastError] = useState("");
+
+  console.error = setLastError;
 
   return (
     <div className="app">
@@ -35,6 +39,7 @@ function AppContent() {
           </div>
         </>
       )}
+      {lastError && <p>{lastError}</p>}
     </div>
   );
 }

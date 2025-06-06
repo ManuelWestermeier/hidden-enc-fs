@@ -1,5 +1,5 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
@@ -7,18 +7,18 @@ export default defineConfig({
     outDir: "docs",
     rollupOptions: {
       output: {
-        entryFileNames: 'index.js',
-        chunkFileNames: '[name].js',
+        entryFileNames: "index.js",
+        chunkFileNames: "[name].js",
         assetFileNames: (assetInfo) => {
-          if (assetInfo.name && assetInfo.name.endsWith('.css')) {
-            return 'index.css';
+          if (assetInfo.name && assetInfo.name.endsWith(".css")) {
+            return "index.css";
           }
-          return '[name].[ext]';
+          return "[name].[ext]";
         },
       },
     },
   },
   server: {
     port: 26270,
-  }
-})
+  },
+});
