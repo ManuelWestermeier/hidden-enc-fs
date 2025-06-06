@@ -13,7 +13,7 @@ function AppContent() {
     useContext(AppContext);
   const [lastError, setLastError] = useState("");
 
-  console.error = setLastError;
+  console.error = (x = "error", y = "") => setLastError(x + y);
 
   return (
     <div className="app">
