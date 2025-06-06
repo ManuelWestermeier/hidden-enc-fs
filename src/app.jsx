@@ -14,7 +14,7 @@ function AppContent() {
   const [lastError, setLastError] = useState("");
 
   console.error = (x = "error", y = "") => setLastError(x + y);
-  window.error = (x = "error", y = "") => setLastError(x + y);
+  window.onerror = (x = "error", y = "") => setLastError(x + y);
 
   return (
     <div className="app">
