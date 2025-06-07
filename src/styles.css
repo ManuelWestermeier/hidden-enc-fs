@@ -39,6 +39,11 @@ a {
 
 .header img {
   width: 5rem;
+  transition: 0.2s all ease-in-out;
+}
+
+.header img:active {
+  transform: scale(5) translateY(100px) translateX(30px) rotate(-180deg);
 }
 
 /* Components */
