@@ -30,7 +30,7 @@ function AppContent() {
               <p>No files.</p>
             ) : (
               metadataArray.map((entry) => (
-                <FileEntry key={entry.name} entry={entry} />
+                <FileEntry key={entry.hash} entry={entry} />
               ))
             )}
           </div>
@@ -74,6 +74,7 @@ export default function App() {
             padding: "8px",
             border: "1px solid red",
           }}
+          onClick={() => setLastError("")}
         >
           {lastError}
         </div>

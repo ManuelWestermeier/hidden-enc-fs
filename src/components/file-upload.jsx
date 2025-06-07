@@ -22,6 +22,18 @@ export default function FileUpload() {
     await writable.close();
   };
 
+  // Check and request permission if not already granted
+  const ensureWritePermission = async (folderHandle) => {
+    let permission = await folderHandle.queryPermission({ mode: "readwrite" });
+    if (permission !== "granted") {
+      permission = await folderHandle.requestPermission({ mode: "readwrite" });
+    }
+
+    if (permission !== "granted") {
+      throw new Error("Please allow read & write access to continue.");
+    }
+  };
+
   const onUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length || !folderHandle || !password) {
@@ -33,33 +45,44 @@ export default function FileUpload() {
     const updatedMeta = [...metadataArray];
 
     for (const file of files) {
-      const id = [...crypto.getRandomValues(new Uint8Array(8))]
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      const formattedName = sanitizeFilename(file.name);
-      const composite = formattedName + file.lastModified + id;
-      const hash = await sha256(composite);
-      const encrypted = await encryptData(await file.arrayBuffer(), password);
+      try {
+        const id =
+          [...crypto.getRandomValues(new Uint8Array(8))]
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("") + Date.now();
+        const formattedName = sanitizeFilename(file.name);
+        const composite = formattedName + file.lastModified + id;
+        const hash = await sha256(composite);
+        const encrypted = await encryptData(await file.arrayBuffer(), password);
 
-      const handle = await folderHandle.getFileHandle(`${hash}.enc`, {
-        create: true,
-      });
-      const writable = await handle.createWritable();
-      await writable.write(JSON.stringify(encrypted));
-      await writable.close();
+        await ensureWritePermission(folderHandle);
 
-      updatedMeta.unshift({
-        name: formattedName,
-        type: file.type || "application/octet-stream",
-        date: new Date(file.lastModified || Date.now()).toISOString(),
-        hash,
-      });
+        const handle = await folderHandle.getFileHandle(`${hash}.enc`, {
+          create: true,
+        });
+        const writable = await handle.createWritable();
+        await writable.write(JSON.stringify(encrypted));
+        await writable.close();
+
+        updatedMeta.unshift({
+          name: formattedName,
+          type: file.type || "application/octet-stream",
+          date: new Date(file.lastModified || Date.now()).toISOString(),
+          hash,
+        });
+      } catch (error) {
+        setErrorMsg("error:" + error);
+      }
     }
 
-    await writeMetadata(updatedMeta);
-    setMetadataArray(updatedMeta);
-    setLoading(false);
-    e.target.value = "";
+    try {
+      await writeMetadata(updatedMeta);
+      setMetadataArray(updatedMeta);
+      setLoading(false);
+      e.target.value = "";
+    } catch (error) {
+      setErrorMsg("error:" + error);
+    }
   };
 
   document.body.ondragover = (e) => {
