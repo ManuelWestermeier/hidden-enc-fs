@@ -46,6 +46,20 @@ export default function PasswordPrompt() {
       await writable.close();
     }
 
+    //for some edge cases
+    try {
+      const handle = await folderHandle.getFileHandle("rand.txt", {
+        create: true,
+      });
+      const writable = await handle.createWritable();
+      await writable.write(JSON.stringify(Math.random()));
+      await writable.close();
+    } catch (error) {
+      alert(
+        "NOW WRITE ACCESS!\nPlease enalble write access, that the programm can store your files."
+      );
+    }
+
     setMetadataArray(metadata);
     setMetadataLoaded(true);
     setLoading(false);

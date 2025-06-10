@@ -17,11 +17,16 @@ export default function FolderPicker() {
     setFolderHandle(null);
     setMetadataLoaded(false);
     try {
-      const handle = await window.showDirectoryPicker();
+      const handle = await window.showDirectoryPicker({
+        id: "hiddenfsstorage",
+        mode: "readwrite",
+        startIn: "documents",
+      });
       setFolderHandle(handle);
     } catch (e) {
       setErrorMsg(
-        "Your device doesn't support this App. (no fs acess/you have to allow file editing)"
+        "Your device doesn't support this App. (no fs acess/you have to allow file editing) " +
+          e
       );
     }
   };

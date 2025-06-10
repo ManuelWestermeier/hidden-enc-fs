@@ -22,18 +22,6 @@ export default function FileUpload() {
     await writable.close();
   };
 
-  // Check and request permission if not already granted
-  const ensureWritePermission = async (folderHandle) => {
-    let permission = await folderHandle.queryPermission({ mode: "readwrite" });
-    if (permission !== "granted") {
-      permission = await folderHandle.requestPermission({ mode: "readwrite" });
-    }
-
-    if (permission !== "granted") {
-      throw new Error("Please allow read & write access to continue.");
-    }
-  };
-
   const onUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (!files.length || !folderHandle || !password) {
@@ -55,7 +43,18 @@ export default function FileUpload() {
         const hash = await sha256(composite);
         const encrypted = await encryptData(await file.arrayBuffer(), password);
 
-        await ensureWritePermission(folderHandle);
+        let permission = await folderHandle.queryPermission({
+          mode: "readwrite",
+        });
+        if (permission !== "granted") {
+          permission = await folderHandle.requestPermission({
+            mode: "readwrite",
+          });
+        }
+
+        if (permission !== "granted") {
+          throw new Error("Please allow read & write access to continue.");
+        }
 
         const handle = await folderHandle.getFileHandle(`${hash}.enc`, {
           create: true,
