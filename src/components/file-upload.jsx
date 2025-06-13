@@ -136,6 +136,13 @@ export default function FileUpload() {
     }
   };
 
+  const cleanup = () => {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    setStream(null);
+    setMode(null);
+    setIsRecording(false);
+  };
+
   const startRecording = () => {
     if (!stream || mode === "photo") return;
     chunksRef.current = [];
@@ -154,12 +161,12 @@ export default function FileUpload() {
     };
     rec.onstart = () => setIsRecording(true);
     rec.onstop = async () => {
-      setIsRecording(false);
       const blob = new Blob(chunksRef.current, { type: rec.mimeType });
       const ext = mode === "audio" ? ".webm" : ".webm";
       await onUpload([
         new File([blob], `${mode}_${Date.now()}${ext}`, { type: blob.type }),
       ]);
+      cleanup();
     };
     recorderRef.current = rec;
     rec.start();
@@ -177,13 +184,12 @@ export default function FileUpload() {
       onUpload([
         new File([blob], `photo_${Date.now()}.png`, { type: "image/png" }),
       ]);
+      cleanup();
     } else if (recorderRef.current && isRecording) {
       recorderRef.current.stop();
-    }
-    if (!isRecording) {
-      if (stream) stream.getTracks().forEach((t) => t.stop());
-      setStream(null);
-      setMode(null);
+    } else {
+      // cancel recording before start or after stop
+      cleanup();
     }
   };
 
@@ -197,8 +203,7 @@ export default function FileUpload() {
     await onUpload([
       new File([blob], `text_${Date.now()}.txt`, { type: "text/plain" }),
     ]);
-    setMode(null);
-    setTextValue("");
+    cleanup();
   };
 
   document.body.style.overflow = mode ? "hidden" : "auto";
@@ -274,11 +279,7 @@ export default function FileUpload() {
             <button className="btn" onClick={submitText} style={{ margin: 5 }}>
               Save Text
             </button>
-            <button
-              className="btn"
-              onClick={() => setMode(null)}
-              style={{ margin: 5 }}
-            >
+            <button className="btn" onClick={cleanup} style={{ margin: 5 }}>
               Cancel
             </button>
           </div>
@@ -316,6 +317,7 @@ export default function FileUpload() {
               autoPlay
               muted
               controls
+              hidden
               style={{ width: "80%" }}
             />
           )}
@@ -354,21 +356,10 @@ export default function FileUpload() {
                 >
                   Take Photo
                 </button>
-                <button
-                  className="btn"
-                  onClick={stopRecording}
-                  style={{ margin: 5 }}
-                >
-                  Cancel
-                </button>
               </>
             )}
-            <button
-              className="btn"
-              onClick={stopRecording}
-              style={{ margin: 5 }}
-            >
-              Exit
+            <button className="btn" onClick={cleanup} style={{ margin: 5 }}>
+              Cancel
             </button>
           </div>
         </div>
