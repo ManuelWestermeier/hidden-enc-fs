@@ -164,11 +164,13 @@ export default function FileUpload() {
     };
     rec.onstart = () => setIsRecording(true);
     rec.onstop = async () => {
-      const blob = new Blob(chunksRef.current, { type: rec.mimeType });
-      const ext = mode === "audio" ? ".webm" : ".webm";
-      await onUpload([
-        new File([blob], `${mode}_${Date.now()}${ext}`, { type: blob.type }),
-      ]);
+      if (window.normal) {
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType });
+        const ext = mode === "audio" ? ".webm" : ".webm";
+        await onUpload([
+          new File([blob], `${mode}_${Date.now()}${ext}`, { type: blob.type }),
+        ]);
+      }
       cleanup();
     };
     recorderRef.current = rec;
@@ -189,7 +191,9 @@ export default function FileUpload() {
       ]);
       cleanup();
     } else if (recorderRef.current && isRecording) {
+      window.normal = true;
       recorderRef.current.stop();
+      setTimeout(() => (window.normal = false), 100);
     } else {
       // cancel recording before start or after stop
       cleanup();
