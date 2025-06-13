@@ -261,18 +261,20 @@ export default function FileUpload() {
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            padding: 20,
             zIndex: 1000,
+            borderRadius: "1rem",
           }}
         >
           <textarea
             value={textValue}
             onChange={(e) => setTextValue(e.target.value)}
+            placeholder="input text..."
             style={{
-              width: "100%",
-              height: "60%",
-              borderRadius: 8,
-              padding: 10,
+              width: "calc(100% - 10rem)",
+              height: "calc(100% - 20rem)",
+              borderRadius: "1rem",
+              resize: "vertical",
+              padding: "1rem",
             }}
           />
           <div style={{ marginTop: 20 }}>
