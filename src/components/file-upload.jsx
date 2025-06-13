@@ -18,6 +18,7 @@ export default function FileUpload() {
   const chunksRef = useRef([]);
   const [recordingType, setRecordingType] = useState(null); // 'audio' | 'video' | 'photo'
   const [stream, setStream] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
 
   // Drag & Drop auf body
   useEffect(() => {
@@ -106,14 +107,12 @@ export default function FileUpload() {
   const openStream = async (type) => {
     try {
       let constraints;
-      if (type === "photo" || type === "video") {
+      if (type === "photo" || type === "video")
         constraints = {
           video: { facingMode: "environment" },
           audio: type === "video",
         };
-      } else {
-        constraints = { audio: true };
-      }
+      else constraints = { audio: true };
       const media = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(media);
       setRecordingType(type);
@@ -124,9 +123,7 @@ export default function FileUpload() {
 
   const startRecording = () => {
     if (!stream || recordingType === "photo") return;
-    // reset
     chunksRef.current = [];
-    // set mimeType options
     const options = {};
     if (
       recordingType === "audio" &&
@@ -143,7 +140,9 @@ export default function FileUpload() {
     rec.ondataavailable = (e) => {
       if (e.data && e.data.size) chunksRef.current.push(e.data);
     };
+    rec.onstart = () => setIsRecording(true);
     rec.onstop = async () => {
+      setIsRecording(false);
       const blob = new Blob(chunksRef.current, { type: rec.mimeType });
       const ext = recordingType === "audio" ? ".webm" : ".webm";
       await onUpload([
@@ -157,7 +156,7 @@ export default function FileUpload() {
   };
 
   const stopRecording = () => {
-    if (recordingType === "photo" && webcamRef.current) {
+    if (recordingType === "photo") {
       const img = webcamRef.current.getScreenshot();
       const byteString = atob(img.split(",")[1]);
       const ab = new ArrayBuffer(byteString.length);
@@ -168,12 +167,15 @@ export default function FileUpload() {
       onUpload([
         new File([blob], `photo_${Date.now()}.png`, { type: "image/png" }),
       ]);
-    } else if (recorderRef.current) {
+    } else if (recorderRef.current && isRecording) {
       recorderRef.current.stop();
     }
-    if (stream) stream.getTracks().forEach((t) => t.stop());
-    setStream(null);
-    setRecordingType(null);
+    if (!isRecording) {
+      // cancel
+      if (stream) stream.getTracks().forEach((t) => t.stop());
+      setStream(null);
+      setRecordingType(null);
+    }
   };
 
   document.body.style.overflow = stream ? "hidden" : "auto";
@@ -219,8 +221,8 @@ export default function FileUpload() {
         <div
           style={{
             position: "fixed",
-            top: "0",
-            left: "0",
+            top: 0,
+            left: 0,
             width: "100%",
             height: "calc(100dvh - 2rem)",
             borderRadius: "1rem",
@@ -234,29 +236,54 @@ export default function FileUpload() {
         >
           {(recordingType === "video" || recordingType === "photo") && (
             <Webcam
-              audio={false}
+              audio={recordingType === "video"}
               ref={webcamRef}
               screenshotFormat="image/png"
               width={640}
               height={480}
             />
           )}
-          <div style={{ marginTop: 20 }}>
+          <div style={{ marginTop: 20, textAlign: "center" }}>
             {recordingType !== "photo" && (
-              <button
-                className="btn"
-                onClick={startRecording}
-                style={{ margin: 5 }}
-              >
-                Start
-              </button>
+              <>
+                <button
+                  className="btn"
+                  onClick={isRecording ? stopRecording : startRecording}
+                  style={{ margin: 5 }}
+                >
+                  {isRecording ? "Stop Recording" : "Start Recording"}
+                </button>
+                {isRecording && (
+                  <div style={{ color: "white", marginTop: 10 }}>
+                    Recording...
+                  </div>
+                )}
+              </>
+            )}
+            {recordingType === "photo" && (
+              <>
+                <button
+                  className="btn"
+                  onClick={stopRecording}
+                  style={{ margin: 5 }}
+                >
+                  Take Photo
+                </button>
+                <button
+                  className="btn"
+                  onClick={stopRecording}
+                  style={{ margin: 5 }}
+                >
+                  Cancel
+                </button>
+              </>
             )}
             <button
               className="btn"
               onClick={stopRecording}
               style={{ margin: 5 }}
             >
-              Stop / Cancel
+              Exit
             </button>
           </div>
         </div>
