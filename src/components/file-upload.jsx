@@ -1,4 +1,4 @@
-import { useContext } from "react";
+import React, { useContext, useRef, useState } from "react";
 import { AppContext } from "../context/app-provider";
 import { encryptData, sha256, sanitizeFilename } from "../crypto-utils";
 
@@ -12,6 +12,12 @@ export default function FileUpload() {
     setLoading,
   } = useContext(AppContext);
 
+  const videoRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const [recordingType, setRecordingType] = useState(null); // 'audio' | 'video'
+  const [chunks, setChunks] = useState([]);
+  const [stream, setStream] = useState(null);
+
   const writeMetadata = async (data) => {
     const enc = await encryptData(JSON.stringify(data), password);
     const handle = await folderHandle.getFileHandle("data.enc", {
@@ -22,66 +28,119 @@ export default function FileUpload() {
     await writable.close();
   };
 
-  const onUpload = async (e) => {
-    const files = Array.from(e.target.files);
+  const saveFile = async (blob, filename, type) => {
+    const arrayBuffer = await blob.arrayBuffer();
+    const id =
+      [...crypto.getRandomValues(new Uint8Array(8))]
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("") + Date.now();
+    const composite = sanitizeFilename(filename) + blob.size + id;
+    const hash = await sha256(composite);
+    const encrypted = await encryptData(arrayBuffer, password);
+
+    let permission = await folderHandle.queryPermission({ mode: "readwrite" });
+    if (permission !== "granted") {
+      permission = await folderHandle.requestPermission({ mode: "readwrite" });
+    }
+    if (permission !== "granted") {
+      throw new Error("Please allow read & write access to continue.");
+    }
+    const handle = await folderHandle.getFileHandle(`${hash}.enc`, {
+      create: true,
+    });
+    const writable = await handle.createWritable();
+    await writable.write(JSON.stringify(encrypted));
+    await writable.close();
+
+    return {
+      name: sanitizeFilename(filename),
+      type: type || blob.type,
+      date: new Date().toISOString(),
+      hash,
+    };
+  };
+
+  const onUpload = async (files) => {
     if (!files.length || !folderHandle || !password) {
       setErrorMsg("Load metadata first.");
       return;
     }
-
     setLoading(true);
     const updatedMeta = [...metadataArray];
-
-    for (const file of files) {
-      try {
-        const id =
-          [...crypto.getRandomValues(new Uint8Array(8))]
-            .map((b) => b.toString(16).padStart(2, "0"))
-            .join("") + Date.now();
-        const formattedName = sanitizeFilename(file.name);
-        const composite = formattedName + file.lastModified + id;
-        const hash = await sha256(composite);
-        const encrypted = await encryptData(await file.arrayBuffer(), password);
-
-        let permission = await folderHandle.queryPermission({
-          mode: "readwrite",
-        });
-        if (permission !== "granted") {
-          permission = await folderHandle.requestPermission({
-            mode: "readwrite",
-          });
-        }
-
-        if (permission !== "granted") {
-          throw new Error("Please allow read & write access to continue.");
-        }
-
-        const handle = await folderHandle.getFileHandle(`${hash}.enc`, {
-          create: true,
-        });
-        const writable = await handle.createWritable();
-        await writable.write(JSON.stringify(encrypted));
-        await writable.close();
-
-        updatedMeta.unshift({
-          name: formattedName,
-          type: file.type || "application/octet-stream",
-          date: new Date(file.lastModified || Date.now()).toISOString(),
-          hash,
-        });
-      } catch (error) {
-        setErrorMsg("error:" + error);
-      }
-    }
-
     try {
+      for (const file of files) {
+        const meta = await saveFile(file, file.name, file.type);
+        updatedMeta.unshift(meta);
+      }
       await writeMetadata(updatedMeta);
       setMetadataArray(updatedMeta);
-      setLoading(false);
-      e.target.value = "";
     } catch (error) {
       setErrorMsg("error:" + error);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleFilePicker = (e) => onUpload(Array.from(e.target.files));
+
+  const startRecording = async (type) => {
+    if (stream) return;
+    try {
+      const constraints =
+        type === "photo"
+          ? { video: { facingMode: "environment" } }
+          : type === "video"
+          ? { video: true, audio: true }
+          : { audio: true };
+      const mediaStream = await navigator.mediaDevices.getUserMedia(
+        constraints
+      );
+      setStream(mediaStream);
+
+      if (type === "photo") {
+        const videoTrack = mediaStream.getVideoTracks()[0];
+        const imageCapture = new ImageCapture(videoTrack);
+        const blob = await imageCapture.takePhoto();
+        await onUpload([
+          new File([blob], `photo_${Date.now()}.jpg`, { type: blob.type }),
+        ]);
+        videoTrack.stop();
+        setStream(null);
+        return;
+      }
+
+      videoRef.current.srcObject = mediaStream;
+      videoRef.current.play();
+      const recorder = new MediaRecorder(mediaStream);
+      mediaRecorderRef.current = recorder;
+      setRecordingType(type);
+      recorder.ondataavailable = (e) =>
+        setChunks((prev) => prev.concat(e.data));
+      recorder.start();
+    } catch (err) {
+      setErrorMsg("Recording failed: " + err.message);
+    }
+  };
+
+  const stopRecording = async () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, {
+        type: recordingType === "audio" ? "audio/webm" : "video/webm",
+      });
+      const ext = recordingType === "audio" ? "webm" : "webm";
+      await onUpload([
+        new File([blob], `${recordingType}_${Date.now()}.${ext}`, {
+          type: blob.type,
+        }),
+      ]);
+      stream.getTracks().forEach((t) => t.stop());
+      setChunks([]);
+      setStream(null);
+      setRecordingType(null);
+    };
+    recorder.stop();
   };
 
   document.body.ondragover = (e) => {
@@ -109,23 +168,58 @@ export default function FileUpload() {
   };
 
   return (
-    <div className="file-upload">
-      <label>
+    <div className="file-upload space-y-4">
+      <div className="flex space-x-2">
         <button
-          style={{ width: "calc(100% - 30px)" }}
-          className="btn btn-large"
-          onClick={() => document.getElementById("upload-file-picker").click()}
+          onClick={() => handleFilePicker({ target: { files: [] } })}
+          className="btn"
         >
-          Upload file(s)
+          Choose File(s)
         </button>
         <input
-          style={{ display: "none" }}
-          id="upload-file-picker"
           type="file"
           multiple
-          onChange={onUpload}
+          style={{ display: "none" }}
+          id="upload-file-picker"
+          onChange={handleFilePicker}
         />
-      </label>
+      </div>
+      <div className="flex space-x-2">
+        <button
+          disabled={stream}
+          onClick={() => startRecording("audio")}
+          className="btn"
+        >
+          Record Audio
+        </button>
+        <button
+          disabled={stream}
+          onClick={() => startRecording("video")}
+          className="btn"
+        >
+          Record Video
+        </button>
+        <button
+          disabled={stream}
+          onClick={() => startRecording("photo")}
+          className="btn"
+        >
+          Take Photo
+        </button>
+        {recordingType && (
+          <button onClick={stopRecording} className="btn btn-danger">
+            Stop {recordingType}
+          </button>
+        )}
+      </div>
+      {stream && recordingType === "video" && (
+        <video
+          ref={videoRef}
+          className="w-full h-auto mt-4 rounded"
+          controls
+          muted
+        />
+      )}
     </div>
   );
 }
