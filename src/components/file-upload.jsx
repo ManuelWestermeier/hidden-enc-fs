@@ -1,7 +1,7 @@
 import React, { useContext, useRef, useState, useEffect } from "react";
 import { AppContext } from "../context/app-provider";
 import { encryptData, sha256, sanitizeFilename } from "../crypto-utils";
-import Webcam from "react-webcam"; // für Foto & Video Preview
+import Webcam from "react-webcam";
 
 export default function FileUpload() {
   const {
@@ -15,15 +15,13 @@ export default function FileUpload() {
 
   const webcamRef = useRef(null);
   const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
   const [recordingType, setRecordingType] = useState(null); // 'audio' | 'video' | 'photo'
   const [stream, setStream] = useState(null);
-  const [chunks, setChunks] = useState([]);
 
   // Drag & Drop auf body
   useEffect(() => {
-    const prevent = (e) => {
-      e.preventDefault();
-    };
+    const prevent = (e) => e.preventDefault();
     const onDragOver = (e) => {
       prevent(e);
       document.body.classList.add("draging");
@@ -108,52 +106,57 @@ export default function FileUpload() {
   const openStream = async (type) => {
     try {
       let constraints;
-      if (type === "photo" || type === "video")
+      if (type === "photo" || type === "video") {
         constraints = {
           video: { facingMode: "environment" },
           audio: type === "video",
         };
-      else constraints = { audio: true };
+      } else {
+        constraints = { audio: true };
+      }
       const media = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(media);
       setRecordingType(type);
-      if (type === "audio") {
-        const rec = new MediaRecorder(media);
-        rec.ondataavailable = (e) => setChunks((prev) => prev.concat(e.data));
-        recorderRef.current = rec;
-      }
     } catch (e) {
       setErrorMsg("Recording failed: " + e.message);
     }
   };
 
   const startRecording = () => {
-    if (recordingType === "video" || recordingType === "audio") {
-      const rec =
-        recordingType === "video"
-          ? new MediaRecorder(stream)
-          : recorderRef.current;
-      rec.ondataavailable = (e) => setChunks((prev) => prev.concat(e.data));
-      recorderRef.current = rec;
-      rec.start();
+    if (!stream || recordingType === "photo") return;
+    // reset
+    chunksRef.current = [];
+    // set mimeType options
+    const options = {};
+    if (
+      recordingType === "audio" &&
+      MediaRecorder.isTypeSupported("audio/webm")
+    )
+      options.mimeType = "audio/webm";
+    if (recordingType === "video") {
+      if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus"))
+        options.mimeType = "video/webm;codecs=vp8,opus";
+      else if (MediaRecorder.isTypeSupported("video/webm"))
+        options.mimeType = "video/webm";
     }
+    const rec = new MediaRecorder(stream, options);
+    rec.ondataavailable = (e) => {
+      if (e.data && e.data.size) chunksRef.current.push(e.data);
+    };
+    rec.onstop = async () => {
+      const blob = new Blob(chunksRef.current, { type: rec.mimeType });
+      const ext = recordingType === "audio" ? ".webm" : ".webm";
+      await onUpload([
+        new File([blob], `${recordingType}_${Date.now()}${ext}`, {
+          type: blob.type,
+        }),
+      ]);
+    };
+    recorderRef.current = rec;
+    rec.start();
   };
 
   const stopRecording = () => {
-    const rec = recorderRef.current;
-    if (rec) {
-      rec.onstop = async () => {
-        const blob = new Blob(chunks, { type: rec.mimeType });
-        const ext =
-          recordingType + (recordingType === "photo" ? ".png" : ".webm");
-        await onUpload([
-          new File([blob], `${recordingType}_${Date.now()}${ext}`, {
-            type: blob.type,
-          }),
-        ]);
-      };
-      rec.stop();
-    }
     if (recordingType === "photo" && webcamRef.current) {
       const img = webcamRef.current.getScreenshot();
       const byteString = atob(img.split(",")[1]);
@@ -165,11 +168,12 @@ export default function FileUpload() {
       onUpload([
         new File([blob], `photo_${Date.now()}.png`, { type: "image/png" }),
       ]);
+    } else if (recorderRef.current) {
+      recorderRef.current.stop();
     }
-    stream.getTracks().forEach((t) => t.stop());
+    if (stream) stream.getTracks().forEach((t) => t.stop());
     setStream(null);
     setRecordingType(null);
-    setChunks([]);
   };
 
   document.body.style.overflow = stream ? "hidden" : "auto";
@@ -230,7 +234,7 @@ export default function FileUpload() {
         >
           {(recordingType === "video" || recordingType === "photo") && (
             <Webcam
-              audio={recordingType === "video"}
+              audio={false}
               ref={webcamRef}
               screenshotFormat="image/png"
               width={640}
@@ -238,31 +242,21 @@ export default function FileUpload() {
             />
           )}
           <div style={{ marginTop: 20 }}>
-            <button
-              className="btn"
-              onClick={startRecording}
-              style={{ margin: 5 }}
-            >
-              Start
-            </button>
+            {recordingType !== "photo" && (
+              <button
+                className="btn"
+                onClick={startRecording}
+                style={{ margin: 5 }}
+              >
+                Start
+              </button>
+            )}
             <button
               className="btn"
               onClick={stopRecording}
               style={{ margin: 5 }}
             >
-              Stop
-            </button>
-            <button
-              className="btn"
-              onClick={() => {
-                stream.getTracks().forEach((t) => t.stop());
-                setStream(null);
-                setRecordingType(null);
-                setChunks([]);
-              }}
-              style={{ margin: 5 }}
-            >
-              Cancel
+              Stop / Cancel
             </button>
           </div>
         </div>
