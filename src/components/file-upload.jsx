@@ -119,6 +119,9 @@ export default function FileUpload() {
   const handlePicker = (e) => onUpload(Array.from(e.target.files));
 
   const openStream = async (type) => {
+    document
+      .getElementById("stream")
+      .scrollIntoView({ behavior: "smooth", block: "center" });
     try {
       let constraints;
       if (type === "photo" || type === "video")
@@ -194,6 +197,9 @@ export default function FileUpload() {
   };
 
   const startText = () => {
+    document
+      .getElementById("stream")
+      .scrollIntoView({ behavior: "smooth", block: "center" });
     setMode("text");
     setTextValue("");
   };
@@ -288,84 +294,85 @@ export default function FileUpload() {
         </div>
       )}
 
-      {stream && mode !== "text" && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100dvh",
-            backgroundColor: "rgba(0,0,0,0.8)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: "1rem",
-            zIndex: 1000,
-          }}
-        >
-          {mode === "video" && (
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              style={{ width: 640, height: 480 }}
-            />
-          )}
-          {mode === "audio" && (
-            <audio
-              ref={audioRef}
-              autoPlay
-              muted
-              controls
-              hidden
-              style={{ width: "80%" }}
-            />
+      <div
+        id="stream"
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100dvh",
+          backgroundColor: "rgba(0,0,0,0.8)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: innerWidth > 750 ? "1rem" : 0,
+          zIndex: 1000,
+          transform: `scaleY(${stream && mode !== "text" ? 1 : 0})`,
+          transition: "all 0.3s ease-in-out",
+        }}
+      >
+        {mode === "video" && (
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            style={{ width: 640, height: 480 }}
+          />
+        )}
+        {mode === "audio" && (
+          <audio
+            ref={audioRef}
+            autoPlay
+            muted
+            controls
+            hidden
+            style={{ width: "80%" }}
+          />
+        )}
+        {mode === "photo" && (
+          <Webcam
+            audio={false}
+            ref={webcamRef}
+            screenshotFormat="image/png"
+            width={640}
+            height={480}
+          />
+        )}
+        <div style={{ marginTop: 20, textAlign: "center" }}>
+          {mode !== "photo" && (
+            <>
+              <button
+                className="btn"
+                onClick={isRecording ? stopRecording : startRecording}
+                style={{ margin: 5 }}
+              >
+                {isRecording ? "Stop Recording" : "Start Recording"}
+              </button>
+              {isRecording && (
+                <div style={{ color: "white", marginTop: 10 }}>
+                  Recording...
+                </div>
+              )}
+            </>
           )}
           {mode === "photo" && (
-            <Webcam
-              audio={false}
-              ref={webcamRef}
-              screenshotFormat="image/png"
-              width={640}
-              height={480}
-            />
+            <>
+              <button
+                className="btn"
+                onClick={stopRecording}
+                style={{ margin: 5 }}
+              >
+                Take Photo
+              </button>
+            </>
           )}
-          <div style={{ marginTop: 20, textAlign: "center" }}>
-            {mode !== "photo" && (
-              <>
-                <button
-                  className="btn"
-                  onClick={isRecording ? stopRecording : startRecording}
-                  style={{ margin: 5 }}
-                >
-                  {isRecording ? "Stop Recording" : "Start Recording"}
-                </button>
-                {isRecording && (
-                  <div style={{ color: "white", marginTop: 10 }}>
-                    Recording...
-                  </div>
-                )}
-              </>
-            )}
-            {mode === "photo" && (
-              <>
-                <button
-                  className="btn"
-                  onClick={stopRecording}
-                  style={{ margin: 5 }}
-                >
-                  Take Photo
-                </button>
-              </>
-            )}
-            <button className="btn" onClick={cleanup} style={{ margin: 5 }}>
-              Cancel
-            </button>
-          </div>
+          <button className="btn" onClick={cleanup} style={{ margin: 5 }}>
+            Cancel
+          </button>
         </div>
-      )}
+      </div>
     </>
   );
 }
