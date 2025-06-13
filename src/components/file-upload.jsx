@@ -1,6 +1,7 @@
 import React, { useContext, useRef, useState, useEffect } from "react";
 import { AppContext } from "../context/app-provider";
 import { encryptData, sha256, sanitizeFilename } from "../crypto-utils";
+import Webcam from "react-webcam"; // für Foto & Video Preview
 
 export default function FileUpload() {
   const {
@@ -12,55 +13,37 @@ export default function FileUpload() {
     setLoading,
   } = useContext(AppContext);
 
-  const videoRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const [recordingType, setRecordingType] = useState(null); // 'audio' | 'video'
-  const [chunks, setChunks] = useState([]);
+  const webcamRef = useRef(null);
+  const recorderRef = useRef(null);
+  const [recordingType, setRecordingType] = useState(null); // 'audio' | 'video' | 'photo'
   const [stream, setStream] = useState(null);
-  const dropRef = useRef(null);
+  const [chunks, setChunks] = useState([]);
 
-  // Video stream to video element
+  // Drag & Drop auf body
   useEffect(() => {
-    if (stream && recordingType === "video" && videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play();
-    }
-  }, [stream, recordingType]);
-
-  // Drag-and-drop handlers
-  useEffect(() => {
-    const preventDefault = (e) => {
+    const prevent = (e) => {
       e.preventDefault();
-      e.stopPropagation();
     };
     const onDragOver = (e) => {
-      preventDefault(e);
-      dropRef.current.classList.add("dragging");
+      prevent(e);
+      document.body.classList.add("draging");
     };
     const onDragLeave = (e) => {
-      preventDefault(e);
-      if (e.target === dropRef.current)
-        dropRef.current.classList.remove("dragging");
+      prevent(e);
+      document.body.classList.remove("draging");
     };
     const onDrop = (e) => {
-      preventDefault(e);
-      dropRef.current.classList.remove("dragging");
-      if (e.dataTransfer.files) {
-        onUpload(Array.from(e.dataTransfer.files));
-      }
+      prevent(e);
+      document.body.classList.remove("draging");
+      if (e.dataTransfer.files) onUpload(Array.from(e.dataTransfer.files));
     };
-    const node = dropRef.current;
-    if (node) {
-      node.addEventListener("dragover", onDragOver);
-      node.addEventListener("dragleave", onDragLeave);
-      node.addEventListener("drop", onDrop);
-    }
+    document.body.addEventListener("dragover", onDragOver);
+    document.body.addEventListener("dragleave", onDragLeave);
+    document.body.addEventListener("drop", onDrop);
     return () => {
-      if (node) {
-        node.removeEventListener("dragover", onDragOver);
-        node.removeEventListener("dragleave", onDragLeave);
-        node.removeEventListener("drop", onDrop);
-      }
+      document.body.removeEventListener("dragover", onDragOver);
+      document.body.removeEventListener("dragleave", onDragLeave);
+      document.body.removeEventListener("drop", onDrop);
     };
   }, []);
 
@@ -75,29 +58,24 @@ export default function FileUpload() {
   };
 
   const saveFile = async (blob, filename, type) => {
-    const arrayBuffer = await blob.arrayBuffer();
+    const buffer = await blob.arrayBuffer();
     const id =
       [...crypto.getRandomValues(new Uint8Array(8))]
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("") + Date.now();
     const composite = sanitizeFilename(filename) + blob.size + id;
     const hash = await sha256(composite);
-    const encrypted = await encryptData(arrayBuffer, password);
-
-    let permission = await folderHandle.queryPermission({ mode: "readwrite" });
-    if (permission !== "granted") {
-      permission = await folderHandle.requestPermission({ mode: "readwrite" });
-    }
-    if (permission !== "granted") {
-      throw new Error("Please allow read & write access to continue.");
-    }
+    const enc = await encryptData(buffer, password);
+    let perm = await folderHandle.queryPermission({ mode: "readwrite" });
+    if (perm !== "granted")
+      perm = await folderHandle.requestPermission({ mode: "readwrite" });
+    if (perm !== "granted") throw new Error("Allow read/write");
     const handle = await folderHandle.getFileHandle(`${hash}.enc`, {
       create: true,
     });
-    const writable = await handle.createWritable();
-    await writable.write(JSON.stringify(encrypted));
-    await writable.close();
-
+    const w = await handle.createWritable();
+    await w.write(JSON.stringify(enc));
+    await w.close();
     return {
       name: sanitizeFilename(filename),
       type: type || blob.type,
@@ -107,187 +85,188 @@ export default function FileUpload() {
   };
 
   const onUpload = async (files) => {
-    if (!files.length || !folderHandle || !password) {
-      setErrorMsg("Load metadata first.");
-      return;
-    }
+    if (!files.length || !folderHandle || !password)
+      return setErrorMsg("Load metadata first.");
     setLoading(true);
-    const updatedMeta = [...metadataArray];
+    const updated = [...metadataArray];
     try {
       for (const file of files) {
         const meta = await saveFile(file, file.name, file.type);
-        updatedMeta.unshift(meta);
+        updated.unshift(meta);
       }
-      await writeMetadata(updatedMeta);
-      setMetadataArray(updatedMeta);
-    } catch (error) {
-      setErrorMsg("error:" + error);
+      await writeMetadata(updated);
+      setMetadataArray(updated);
+    } catch (e) {
+      setErrorMsg(e.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFilePicker = (e) => onUpload(Array.from(e.target.files));
+  const handlePicker = (e) => onUpload(Array.from(e.target.files));
 
-  const startRecording = async (type) => {
-    if (stream) return;
+  const openStream = async (type) => {
     try {
-      const constraints =
-        type === "photo"
-          ? { video: { facingMode: "environment" } }
-          : type === "video"
-          ? { video: true, audio: true }
-          : { audio: true };
-      const mediaStream = await navigator.mediaDevices.getUserMedia(
-        constraints
-      );
+      let constraints;
+      if (type === "photo" || type === "video")
+        constraints = {
+          video: { facingMode: "environment" },
+          audio: type === "video",
+        };
+      else constraints = { audio: true };
+      const media = await navigator.mediaDevices.getUserMedia(constraints);
+      setStream(media);
       setRecordingType(type);
-      setStream(mediaStream);
-
-      if (type === "photo") {
-        const videoTrack = mediaStream.getVideoTracks()[0];
-        const imageCapture = new ImageCapture(videoTrack);
-        const blob = await imageCapture.takePhoto();
-        await onUpload([
-          new File([blob], `photo_${Date.now()}.jpg`, { type: blob.type }),
-        ]);
-        videoTrack.stop();
-        setStream(null);
-        setRecordingType(null);
-        return;
+      if (type === "audio") {
+        const rec = new MediaRecorder(media);
+        rec.ondataavailable = (e) => setChunks((prev) => prev.concat(e.data));
+        recorderRef.current = rec;
       }
-
-      const recorder = new MediaRecorder(mediaStream);
-      mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (e) =>
-        setChunks((prev) => prev.concat(e.data));
-      recorder.start();
-    } catch (err) {
-      setErrorMsg("Recording failed: " + err.message);
+    } catch (e) {
+      setErrorMsg("Recording failed: " + e.message);
     }
   };
 
-  const stopRecording = async () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder) return;
-    recorder.onstop = async () => {
-      const blob = new Blob(chunks, {
-        type: recordingType === "audio" ? "audio/webm" : "video/webm",
-      });
-      const ext = recordingType === "audio" ? "webm" : "webm";
-      await onUpload([
-        new File([blob], `${recordingType}_${Date.now()}.${ext}`, {
-          type: blob.type,
-        }),
-      ]);
-      stream.getTracks().forEach((t) => t.stop());
-      setChunks([]);
-      setStream(null);
-      setRecordingType(null);
-    };
-    recorder.stop();
+  const startRecording = () => {
+    if (recordingType === "video" || recordingType === "audio") {
+      const rec =
+        recordingType === "video"
+          ? new MediaRecorder(stream)
+          : recorderRef.current;
+      rec.ondataavailable = (e) => setChunks((prev) => prev.concat(e.data));
+      recorderRef.current = rec;
+      rec.start();
+    }
   };
 
-  return (
-    <div
-      ref={dropRef}
-      className="file-upload space-y-4 border-2 border-dashed p-4 rounded relative"
-    >
-      <div className="absolute inset-0 flex items-center justify-center text-gray-400 pointer-events-none">
-        Ziehe Dateien hierher oder wähle sie aus
-      </div>
-      <div className="flex space-x-2 relative z-10">
-        <button
-          onClick={() => document.getElementById("upload-file-picker").click()}
-          className="btn"
-        >
-          Choose File(s)
-        </button>
-        <input
-          id="upload-file-picker"
-          type="file"
-          multiple
-          style={{ display: "none" }}
-          onChange={handleFilePicker}
-        />
-      </div>
-      <div className="flex space-x-2 relative z-10">
-        <button
-          disabled={!!stream}
-          onClick={() => startRecording("audio")}
-          className="btn"
-        >
-          Record Audio
-        </button>
-        <button
-          disabled={!!stream}
-          onClick={() => startRecording("video")}
-          className="btn"
-        >
-          Record Video
-        </button>
-        <button
-          disabled={!!stream}
-          onClick={() => startRecording("photo")}
-          className="btn"
-        >
-          Take Photo
-        </button>
-        {stream && recordingType !== "photo" && (
-          <button onClick={stopRecording} className="btn btn-danger">
-            Stop {recordingType}
-          </button>
-        )}
-      </div>
+  const stopRecording = () => {
+    const rec = recorderRef.current;
+    if (rec) {
+      rec.onstop = async () => {
+        const blob = new Blob(chunks, { type: rec.mimeType });
+        const ext =
+          recordingType + (recordingType === "photo" ? ".png" : ".webm");
+        await onUpload([
+          new File([blob], `${recordingType}_${Date.now()}${ext}`, {
+            type: blob.type,
+          }),
+        ]);
+      };
+      rec.stop();
+    }
+    if (recordingType === "photo" && webcamRef.current) {
+      const img = webcamRef.current.getScreenshot();
+      const byteString = atob(img.split(",")[1]);
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++)
+        ia[i] = byteString.charCodeAt(i);
+      const blob = new Blob([ab], { type: "image/png" });
+      onUpload([
+        new File([blob], `photo_${Date.now()}.png`, { type: "image/png" }),
+      ]);
+    }
+    stream.getTracks().forEach((t) => t.stop());
+    setStream(null);
+    setRecordingType(null);
+    setChunks([]);
+  };
 
-      {/* Fullscreen overlay for recording */}
+  document.body.style.overflow = stream ? "hidden" : "auto";
+
+  return (
+    <>
+      <button
+        className="btn"
+        onClick={() => document.getElementById("picker").click()}
+      >
+        Upload
+      </button>
+      <input
+        id="picker"
+        type="file"
+        multiple
+        style={{ display: "none" }}
+        onChange={handlePicker}
+      />
+      <button
+        className="btn"
+        disabled={!!stream}
+        onClick={() => openStream("audio")}
+      >
+        Record Audio
+      </button>
+      <button
+        className="btn"
+        disabled={!!stream}
+        onClick={() => openStream("video")}
+      >
+        Record Video
+      </button>
+      <button
+        className="btn"
+        disabled={!!stream}
+        onClick={() => openStream("photo")}
+      >
+        Take Photo
+      </button>
+
       {stream && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50">
-          {recordingType === "video" && (
-            <video
-              ref={videoRef}
-              className="max-w-full max-h-full rounded"
-              muted
+        <div
+          style={{
+            position: "fixed",
+            top: "0",
+            left: "0",
+            width: "100%",
+            height: "calc(100dvh - 2rem)",
+            borderRadius: "1rem",
+            backgroundColor: "rgba(0,0,0,0.8)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+        >
+          {(recordingType === "video" || recordingType === "photo") && (
+            <Webcam
+              audio={recordingType === "video"}
+              ref={webcamRef}
+              screenshotFormat="image/png"
+              width={640}
+              height={480}
             />
           )}
-          <div className="mt-4 space-x-4">
-            {recordingType === "photo" ? null : (
-              <button
-                onClick={() =>
-                  mediaRecorderRef.current?.state === "recording"
-                    ? stopRecording()
-                    : startRecording(recordingType)
-                }
-                className="btn btn-large"
-              >
-                {mediaRecorderRef.current?.state === "recording"
-                  ? "Stop"
-                  : "Start"}{" "}
-                Recording
-              </button>
-            )}
-            {recordingType === "photo" && (
-              <button
-                onClick={() => startRecording("photo")}
-                className="btn btn-large"
-              >
-                Take Photo
-              </button>
-            )}
+          <div style={{ marginTop: 20 }}>
             <button
+              className="btn"
+              onClick={startRecording}
+              style={{ margin: 5 }}
+            >
+              Start
+            </button>
+            <button
+              className="btn"
+              onClick={stopRecording}
+              style={{ margin: 5 }}
+            >
+              Stop
+            </button>
+            <button
+              className="btn"
               onClick={() => {
                 stream.getTracks().forEach((t) => t.stop());
                 setStream(null);
                 setRecordingType(null);
                 setChunks([]);
               }}
-              className="btn btn-secondary"
+              style={{ margin: 5 }}
             >
-              Abbrechen
+              Cancel
             </button>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

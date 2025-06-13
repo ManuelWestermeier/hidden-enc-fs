@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import { useContext } from "react";
 import { AppContext } from "../context/app-provider";
 import { decryptData, encryptData } from "../crypto-utils";
 
@@ -67,7 +67,8 @@ export default function PasswordPrompt() {
 
   return (
     <form onSubmit={loadOrInitMetadata} className="password-prompt">
-      <p>Enter your password to load (or initialize) metadata:</p>
+      <p>Enter your password to load (or initialize for {folderHandle.name}) metadata:</p>
+      <input type="hidden" value={folderHandle.name} />
       <input
         type="password"
         placeholder="Password..."

@@ -7,7 +7,7 @@ export default function Search() {
     <input
       autoFocus
       className="input"
-      style={{ width: "calc(100% - 30px)" }}
+      style={{ width: "calc(100% - 30px)", marginTop: "2rem" }}
       value={search}
       onInput={(e) => setSearch(e.target.value)}
       type="text"
