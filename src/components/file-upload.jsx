@@ -16,9 +16,13 @@ export default function FileUpload() {
   const webcamRef = useRef(null);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
-  const [recordingType, setRecordingType] = useState(null); // 'audio' | 'video' | 'photo'
+  const videoRef = useRef(null);
+  const audioRef = useRef(null);
+
+  const [mode, setMode] = useState(null); // 'audio' | 'video' | 'photo' | 'text'
   const [stream, setStream] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [textValue, setTextValue] = useState("");
 
   // Drag & Drop auf body
   useEffect(() => {
@@ -45,6 +49,16 @@ export default function FileUpload() {
       document.body.removeEventListener("drop", onDrop);
     };
   }, []);
+
+  // attach stream to media elements
+  useEffect(() => {
+    if (stream) {
+      if (mode === "video" && videoRef.current)
+        videoRef.current.srcObject = stream;
+      if (mode === "audio" && audioRef.current)
+        audioRef.current.srcObject = stream;
+    }
+  }, [stream, mode]);
 
   const writeMetadata = async (data) => {
     const enc = await encryptData(JSON.stringify(data), password);
@@ -112,25 +126,23 @@ export default function FileUpload() {
           video: { facingMode: "environment" },
           audio: type === "video",
         };
-      else constraints = { audio: true };
+      else if (type === "audio") constraints = { audio: true };
+      else return;
       const media = await navigator.mediaDevices.getUserMedia(constraints);
       setStream(media);
-      setRecordingType(type);
+      setMode(type);
     } catch (e) {
       setErrorMsg("Recording failed: " + e.message);
     }
   };
 
   const startRecording = () => {
-    if (!stream || recordingType === "photo") return;
+    if (!stream || mode === "photo") return;
     chunksRef.current = [];
     const options = {};
-    if (
-      recordingType === "audio" &&
-      MediaRecorder.isTypeSupported("audio/webm")
-    )
+    if (mode === "audio" && MediaRecorder.isTypeSupported("audio/webm"))
       options.mimeType = "audio/webm";
-    if (recordingType === "video") {
+    if (mode === "video") {
       if (MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus"))
         options.mimeType = "video/webm;codecs=vp8,opus";
       else if (MediaRecorder.isTypeSupported("video/webm"))
@@ -144,11 +156,9 @@ export default function FileUpload() {
     rec.onstop = async () => {
       setIsRecording(false);
       const blob = new Blob(chunksRef.current, { type: rec.mimeType });
-      const ext = recordingType === "audio" ? ".webm" : ".webm";
+      const ext = mode === "audio" ? ".webm" : ".webm";
       await onUpload([
-        new File([blob], `${recordingType}_${Date.now()}${ext}`, {
-          type: blob.type,
-        }),
+        new File([blob], `${mode}_${Date.now()}${ext}`, { type: blob.type }),
       ]);
     };
     recorderRef.current = rec;
@@ -156,7 +166,7 @@ export default function FileUpload() {
   };
 
   const stopRecording = () => {
-    if (recordingType === "photo") {
+    if (mode === "photo") {
       const img = webcamRef.current.getScreenshot();
       const byteString = atob(img.split(",")[1]);
       const ab = new ArrayBuffer(byteString.length);
@@ -171,14 +181,27 @@ export default function FileUpload() {
       recorderRef.current.stop();
     }
     if (!isRecording) {
-      // cancel
       if (stream) stream.getTracks().forEach((t) => t.stop());
       setStream(null);
-      setRecordingType(null);
+      setMode(null);
     }
   };
 
-  document.body.style.overflow = stream ? "hidden" : "auto";
+  const startText = () => {
+    setMode("text");
+    setTextValue("");
+  };
+
+  const submitText = async () => {
+    const blob = new Blob([textValue], { type: "text/plain" });
+    await onUpload([
+      new File([blob], `text_${Date.now()}.txt`, { type: "text/plain" }),
+    ]);
+    setMode(null);
+    setTextValue("");
+  };
+
+  document.body.style.overflow = mode ? "hidden" : "auto";
 
   return (
     <>
@@ -197,46 +220,108 @@ export default function FileUpload() {
       />
       <button
         className="btn"
-        disabled={!!stream}
+        disabled={!!mode}
         onClick={() => openStream("audio")}
       >
         Record Audio
       </button>
       <button
         className="btn"
-        disabled={!!stream}
+        disabled={!!mode}
         onClick={() => openStream("video")}
       >
         Record Video
       </button>
       <button
         className="btn"
-        disabled={!!stream}
+        disabled={!!mode}
         onClick={() => openStream("photo")}
       >
         Take Photo
       </button>
+      <button className="btn" disabled={!!mode} onClick={startText}>
+        Create Text
+      </button>
 
-      {stream && (
+      {mode === "text" && (
         <div
           style={{
             position: "fixed",
             top: 0,
             left: 0,
             width: "100%",
-            height: "calc(100dvh - 2rem)",
-            borderRadius: "1rem",
+            height: "100dvh",
             backgroundColor: "rgba(0,0,0,0.8)",
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
+            padding: 20,
             zIndex: 1000,
           }}
         >
-          {(recordingType === "video" || recordingType === "photo") && (
+          <textarea
+            value={textValue}
+            onChange={(e) => setTextValue(e.target.value)}
+            style={{
+              width: "100%",
+              height: "60%",
+              borderRadius: 8,
+              padding: 10,
+            }}
+          />
+          <div style={{ marginTop: 20 }}>
+            <button className="btn" onClick={submitText} style={{ margin: 5 }}>
+              Save Text
+            </button>
+            <button
+              className="btn"
+              onClick={() => setMode(null)}
+              style={{ margin: 5 }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {stream && mode !== "text" && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100%",
+            height: "100dvh",
+            backgroundColor: "rgba(0,0,0,0.8)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: "1rem",
+            zIndex: 1000,
+          }}
+        >
+          {mode === "video" && (
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              style={{ width: 640, height: 480 }}
+            />
+          )}
+          {mode === "audio" && (
+            <audio
+              ref={audioRef}
+              autoPlay
+              muted
+              controls
+              style={{ width: "80%" }}
+            />
+          )}
+          {mode === "photo" && (
             <Webcam
-              audio={recordingType === "video"}
+              audio={false}
               ref={webcamRef}
               screenshotFormat="image/png"
               width={640}
@@ -244,7 +329,7 @@ export default function FileUpload() {
             />
           )}
           <div style={{ marginTop: 20, textAlign: "center" }}>
-            {recordingType !== "photo" && (
+            {mode !== "photo" && (
               <>
                 <button
                   className="btn"
@@ -260,7 +345,7 @@ export default function FileUpload() {
                 )}
               </>
             )}
-            {recordingType === "photo" && (
+            {mode === "photo" && (
               <>
                 <button
                   className="btn"
