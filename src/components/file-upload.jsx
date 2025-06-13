@@ -1,4 +1,4 @@
-import React, { useContext, useRef, useState } from "react";
+import React, { useContext, useRef, useState, useEffect } from "react";
 import { AppContext } from "../context/app-provider";
 import { encryptData, sha256, sanitizeFilename } from "../crypto-utils";
 
@@ -17,6 +17,52 @@ export default function FileUpload() {
   const [recordingType, setRecordingType] = useState(null); // 'audio' | 'video'
   const [chunks, setChunks] = useState([]);
   const [stream, setStream] = useState(null);
+  const dropRef = useRef(null);
+
+  // Video stream to video element
+  useEffect(() => {
+    if (stream && recordingType === "video" && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.play();
+    }
+  }, [stream, recordingType]);
+
+  // Drag-and-drop handlers
+  useEffect(() => {
+    const preventDefault = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    const onDragOver = (e) => {
+      preventDefault(e);
+      dropRef.current.classList.add("dragging");
+    };
+    const onDragLeave = (e) => {
+      preventDefault(e);
+      if (e.target === dropRef.current)
+        dropRef.current.classList.remove("dragging");
+    };
+    const onDrop = (e) => {
+      preventDefault(e);
+      dropRef.current.classList.remove("dragging");
+      if (e.dataTransfer.files) {
+        onUpload(Array.from(e.dataTransfer.files));
+      }
+    };
+    const node = dropRef.current;
+    if (node) {
+      node.addEventListener("dragover", onDragOver);
+      node.addEventListener("dragleave", onDragLeave);
+      node.addEventListener("drop", onDrop);
+    }
+    return () => {
+      if (node) {
+        node.removeEventListener("dragover", onDragOver);
+        node.removeEventListener("dragleave", onDragLeave);
+        node.removeEventListener("drop", onDrop);
+      }
+    };
+  }, []);
 
   const writeMetadata = async (data) => {
     const enc = await encryptData(JSON.stringify(data), password);
@@ -95,6 +141,7 @@ export default function FileUpload() {
       const mediaStream = await navigator.mediaDevices.getUserMedia(
         constraints
       );
+      setRecordingType(type);
       setStream(mediaStream);
 
       if (type === "photo") {
@@ -106,14 +153,12 @@ export default function FileUpload() {
         ]);
         videoTrack.stop();
         setStream(null);
+        setRecordingType(null);
         return;
       }
 
-      videoRef.current.srcObject = mediaStream;
-      videoRef.current.play();
       const recorder = new MediaRecorder(mediaStream);
       mediaRecorderRef.current = recorder;
-      setRecordingType(type);
       recorder.ondataavailable = (e) =>
         setChunks((prev) => prev.concat(e.data));
       recorder.start();
@@ -143,82 +188,105 @@ export default function FileUpload() {
     recorder.stop();
   };
 
-  document.body.ondragover = (e) => {
-    e.preventDefault(); // damit Drop funktioniert
-    document.body.classList.add("draging");
-  };
-
-  document.body.ondragleave = (e) => {
-    // Nur entfernen, wenn die Maus wirklich den Body verlässt,
-    // nicht wenn sie z.B. auf ein Kind-Element geht.
-    if (e.target === document.body) {
-      document.body.classList.remove("draging");
-    }
-  };
-
-  document.body.ondragend = document.body.ondragleave;
-
-  document.body.ondrop = (e) => {
-    e.preventDefault();
-    document.body.classList.remove("draging");
-
-    if (e.dataTransfer?.files) {
-      onUpload({ target: { files: e.dataTransfer.files } });
-    }
-  };
-
   return (
-    <div className="file-upload space-y-4">
-      <div className="flex space-x-2">
+    <div
+      ref={dropRef}
+      className="file-upload space-y-4 border-2 border-dashed p-4 rounded relative"
+    >
+      <div className="absolute inset-0 flex items-center justify-center text-gray-400 pointer-events-none">
+        Ziehe Dateien hierher oder wähle sie aus
+      </div>
+      <div className="flex space-x-2 relative z-10">
         <button
-          onClick={() => handleFilePicker({ target: { files: [] } })}
+          onClick={() => document.getElementById("upload-file-picker").click()}
           className="btn"
         >
           Choose File(s)
         </button>
         <input
+          id="upload-file-picker"
           type="file"
           multiple
           style={{ display: "none" }}
-          id="upload-file-picker"
           onChange={handleFilePicker}
         />
       </div>
-      <div className="flex space-x-2">
+      <div className="flex space-x-2 relative z-10">
         <button
-          disabled={stream}
+          disabled={!!stream}
           onClick={() => startRecording("audio")}
           className="btn"
         >
           Record Audio
         </button>
         <button
-          disabled={stream}
+          disabled={!!stream}
           onClick={() => startRecording("video")}
           className="btn"
         >
           Record Video
         </button>
         <button
-          disabled={stream}
+          disabled={!!stream}
           onClick={() => startRecording("photo")}
           className="btn"
         >
           Take Photo
         </button>
-        {recordingType && (
+        {stream && recordingType !== "photo" && (
           <button onClick={stopRecording} className="btn btn-danger">
             Stop {recordingType}
           </button>
         )}
       </div>
-      {stream && recordingType === "video" && (
-        <video
-          ref={videoRef}
-          className="w-full h-auto mt-4 rounded"
-          controls
-          muted
-        />
+
+      {/* Fullscreen overlay for recording */}
+      {stream && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex flex-col items-center justify-center z-50">
+          {recordingType === "video" && (
+            <video
+              ref={videoRef}
+              className="max-w-full max-h-full rounded"
+              muted
+            />
+          )}
+          <div className="mt-4 space-x-4">
+            {recordingType === "photo" ? null : (
+              <button
+                onClick={() =>
+                  mediaRecorderRef.current?.state === "recording"
+                    ? stopRecording()
+                    : startRecording(recordingType)
+                }
+                className="btn btn-large"
+              >
+                {mediaRecorderRef.current?.state === "recording"
+                  ? "Stop"
+                  : "Start"}{" "}
+                Recording
+              </button>
+            )}
+            {recordingType === "photo" && (
+              <button
+                onClick={() => startRecording("photo")}
+                className="btn btn-large"
+              >
+                Take Photo
+              </button>
+            )}
+            <button
+              onClick={() => {
+                stream.getTracks().forEach((t) => t.stop());
+                setStream(null);
+                setRecordingType(null);
+                setChunks([]);
+              }}
+              className="btn btn-secondary"
+            >
+              Abbrechen
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
